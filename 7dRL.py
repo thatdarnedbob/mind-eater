@@ -127,21 +127,18 @@ def main_menu():
 
 
 def new_game():
-	global player, game_state, game_log, faculties, target
+	global player, game_state, game_log, target
 
 	if os.path.isfile('savegame'):
 		os.remove('savegame')
 
 	# create player
 
-	player = Object(0, 0, '@', 'player', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter())
+	player = Object(0, 0, '@', 'player', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter(), mind=player_mind())
 	target = None
 
 	make_village_map()
 	initialize_fov()
-
-	#buffed for testing purposes
-	faculties = [1, 0]
 
 	game_log = []
 
@@ -163,12 +160,11 @@ def save_game():
 	file['stairs_index'] = objects.index(stairs)
 	file['game_state'] = game_state
 	file['game_log'] = game_log
-	file['faculties'] = faculties
 
 	file.close()
 
 def load_game():
-	global cur_map, objects, player, stairs, game_state, game_log, faculties
+	global cur_map, objects, player, stairs, game_state, game_log
 	# set state
 
 	if not os.path.isfile('savegame'):
@@ -182,7 +178,6 @@ def load_game():
 	stairs = objects[file['stairs_index']]
 	game_state = file['game_state']
 	game_log = file['game_log']
-	faculties = file['faculties']
 
 	file.close()
 
@@ -251,6 +246,10 @@ class Object:
 			self.mind.owner = self
 			self.mind.name = "The mind of a %s."%self.name
 			self.mind.desc = "This is a %s's mind. It has stuff."%self.name
+
+		if self.mind and self.fighter:
+			# otherwise, a fighter with the parry skill starts off not full.
+			self.fighter.parries_left = self.fighter.max_parries
 
 	def move(self, dx, dy):
 		new_x = self.x + dx
@@ -384,16 +383,20 @@ class Fighter:
 def player_fighter():
 	return Fighter(wounds=3, defense=0, power=1, xp=0, death_function=player_death)
 
+def player_mind():
+	# buffed for testing purposes
+	return Mind(make_faculty_list(mapping=0, parry=1))
+
 def farmer(x, y):
-	fighter_comp = Fighter(wounds = 1, defense = 1, power = 1, xp = 0, death_function=monster_death)
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
-	mind_comp = Mind([1, 1])
+	mind_comp = Mind(make_faculty_list(mapping = 1, parry=1))
 	return Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 
 def buff_farmer(x, y):
-	fighter_comp = Fighter(wounds = 3, defense = 3, power = 1, xp = 0, death_function=monster_death)
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
-	mind_comp = Mind([1, 1])
+	mind_comp = Mind(make_faculty_list(mapping = 1, parry=3))
 	return Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 
 def door(x, y):
@@ -429,8 +432,8 @@ def door_open_death(monster):
 
 def get_all_buffs(buffed):
 	# implement buffs later
-	if buffed is player:
-		return [Buff(max_parries_bonus=faculties[1])]
+	if buffed.mind is not None:
+		return [Buff(max_parries_bonus=buffed.mind.skills[1])]
 	else:
 		return []
 
@@ -757,7 +760,7 @@ def make_village_map():
 
 		
 
-	objects.append(farmer(5,5))
+	objects.append(buff_farmer(5,5))
 
 	stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
 	objects.append(stairs)
@@ -1106,7 +1109,7 @@ def render_all():
 				if visible:
 					tile = cur_map[map_x][map_y]
 					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, tile.back)
-					if faculties[0]:
+					if player.mind.skills[0]:
 						cur_map[map_x][map_y].explored = True
 				elif cur_map[map_x][map_y].explored:
 					# explored tile logic
@@ -1219,7 +1222,7 @@ def render_all_night():
 				if visible:
 					tile = cur_map[map_x][map_y]
 					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, libtcod.black)
-					if faculties[0]:
+					if player.mind.skills[0]:
 						cur_map[map_x][map_y].explored = True
 				elif cur_map[map_x][map_y].explored:
 					# explored tile logic
@@ -1463,7 +1466,7 @@ def player_eat_mind():
 	available_minds = []
 
 	for obj in objects:
-		if obj.mind and obj.x == player.x and obj.y == player.y:
+		if obj.mind and obj.x == player.x and obj.y == player.y and obj is not player:
 			available_minds.append( [obj.mind.name, obj.mind.desc, obj.mind] )
 	# Now, choose mind from available_minds with a menu
 
@@ -1483,15 +1486,15 @@ def player_eat_mind():
 	if choice == -1:
 		return 'took-turn'
 
-	# update the faculties based on that
+	# update the player skills based on that
 
-	faculties[choice] += 1
+	player.mind.skills[choice] += 1
 	if choice == 1:
 		player_pause()
 		player_pause()
 
 	log("You devour the mind...", libtcod.red)
-	log("You know %s!" %num_to_faculty_name(choice, faculties[choice]), libtcod.blue)
+	log("You know %s!" %num_to_faculty_name(choice, player.mind.skills[choice]), libtcod.blue)
 
 	return 'took-turn'
 
@@ -1507,18 +1510,17 @@ def num_to_faculty_description(ind, magnitude=1):
 	if ind == 1:
 		return "Each parry lets you block one more attack. Stand still to regain parries slowly."
 
-def make_faculty_list():
+def make_faculty_list(mapping=0, parry=0):
 
-	return []
+	return [mapping, parry]
 
 def mindeating_menu(eaten_mind):
 	options = []
 
-	for i in range(len(faculties)):
-		mag = eaten_mind.skills[i]
-		if mag > faculties[i]:
+	for i in range(len(player.mind.skills)):
+		if eaten_mind.skills[i] > player.mind.skills[i]:
 
-			options.append( [num_to_faculty_name(i, mag), num_to_faculty_description(i, mag), i] )
+			options.append( [num_to_faculty_name(i, player.mind.skills[i] + 1), num_to_faculty_description(i, player.mind.skills[i] + 1), i] )
 
 	if len(options) == 0:
 		eaten_mind.owner.mind = None
