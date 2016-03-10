@@ -384,8 +384,8 @@ def player_fighter():
 	return Fighter(wounds=3, defense=0, power=1, xp=0, death_function=player_death)
 
 def player_mind():
-	# buffed for testing purposes
-	return Mind(make_faculty_list(mapping=0, parry=1))
+	# could buffed for testing purposes. should start out all zeros
+	return Mind(make_faculty_list(mapping=0, parry=0))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
@@ -401,7 +401,7 @@ def buff_farmer(x, y):
 
 def door(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, xp = 0, death_function=door_open_death)
-	return Object(x, y, 150, 'door', libtcod.sepia, walkable=True, fighter=fighter_comp)
+	return Object(x, y, 150, 'door', libtcod.sepia, walkable=True, always_visible=True, fighter=fighter_comp)
 
 def player_death(player):
 	# the game is over
@@ -425,6 +425,7 @@ def monster_death(monster):
 def door_open_death(monster):
 	global fov_recompute, objects
 	log('You shatter the door with a mighty crash!', libtcod.yellow)
+	monster.fighter = None
 	objects.remove(monster)
 	cur_map[monster.x][monster.y].change_type('wood floor')
 	#fov_recompute = True
@@ -760,7 +761,17 @@ def make_village_map():
 
 		
 
-	objects.append(buff_farmer(5,5))
+	objects.append(farmer(5,5))
+	objects.append(farmer(6,5))
+	objects.append(farmer(7,5))
+	objects.append(farmer(8,5))
+	objects.append(farmer(9,5))
+	objects.append(farmer(10,5))
+	objects.append(farmer(11,5))
+	objects.append(farmer(12,5))
+	objects.append(farmer(13,5))
+	player.x = 14
+	player.y = 5
 
 	stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
 	objects.append(stairs)
@@ -1350,7 +1361,7 @@ def triple_menu(title, options):
 		letter_index = ord('a')
 
 		for option_tuple in options:
-			text = '(' + chr(letter_index) + ')' + option_tuple[0]
+			text = '(' + chr(letter_index) + ') ' + option_tuple[0]
 			if selected == y - title_height:
 				libtcod.console_set_default_background(menu, libtcod.light_blue)
 				libtcod.console_print_ex(menu, 0, y, libtcod.BKGND_SET, libtcod.LEFT, text)
@@ -1377,11 +1388,15 @@ def triple_menu(title, options):
 		libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
 
 		if key.vk == libtcod.KEY_ESCAPE:
+			libtcod.console_clear(menu)
+			libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
 			libtcod.console_delete(menu)
 			return 'no-choice'
 
 		index = key.c - ord('a')
 		if index >= 0 and index < len(options):
+			libtcod.console_clear(menu)
+			libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
 			libtcod.console_delete(menu)
 			return options[index][2]
 		elif (key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2) and selected < len(options) - 1:
@@ -1389,17 +1404,114 @@ def triple_menu(title, options):
 		elif (key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8) and selected > 0:
 			selected -= 1
 		elif key.vk == libtcod.KEY_ENTER:
+
+			libtcod.console_clear(menu)
+			libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
 			libtcod.console_delete(menu)
 			return options[selected][2]
 
 	libtcod.console_delete(menu)
 	return None
 
+def single_screen(title, options):
+
+	height = len(options)
+
+	menu = libtcod.console_new(MENU_WIDTH, height)
+
+	libtcod.console_set_default_foreground(menu, libtcod.white)
+	libtcod.console_set_default_background(menu, libtcod.darkest_blue)
+
+	# initialization finish, begin loop.
+
+	choice_made = False
+
+	while not choice_made:
+
+		libtcod.console_clear(menu)
+
+		title_height = libtcod.console_get_height_rect(0, 0, 0, MENU_WIDTH, MENU_MAX_HEIGHT, title)
+
+		# print the menu title
+		libtcod.console_print_rect_ex(menu, 0, 0, MENU_WIDTH, title_height, libtcod.BKGND_DEFAULT, libtcod.LEFT, title)
+
+		# print each option
+
+		y = title_height
+		letter_index = ord('a')
+
+		for option in options:
+			text = '(' + chr(letter_index) + ') ' + option
+			libtcod.console_print_ex(menu, 0, y, libtcod.BKGND_DEFAULT, libtcod.LEFT, text)
+
+			y += 1
+			letter_index += 1
+		
+		# then we blit this sucker onto the main screen.
+
+		x = SCREEN_WIDTH / 2 - MENU_WIDTH / 2
+		y = SCREEN_HEIGHT / 2 - height / 2
+		libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
+
+		libtcod.console_flush()
+
+		# ok, now we handle INPUT
+
+		libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+
+		if key.vk == libtcod.KEY_ESCAPE or key.vk == libtcod.KEY_SPACE or key.vk == libtcod.KEY_ENTER:
+			libtcod.console_clear(menu)
+			libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
+			libtcod.console_delete(menu)
+			return None
+
+	libtcod.console_clear(menu)
+	libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
+	libtcod.console_delete(menu)
+	return None
+
+def escape_menu():
+	options = []
+	options.append(["Skills", "", 0],)
+	options.append(["Controls", "", 1])
+	if game_state == 'playing':
+		options.append(["Save and Quit", "", 2])
+	elif game_state == 'dead':
+		options.append(["Quit", "", 3])
+
+	choice = triple_menu("***PAUSED***", options)
+
+	if choice == 0:
+		skills_menu()
+	elif choice == 1:
+		controls_screen()
+	elif choice == 2 or choice == 3:
+		return 'exit'
+
+def skills_menu():
+	options = []
+
+	for inx, skill in enumerate(player.mind.skills):
+		if skill > 0:
+			options.append( [num_to_faculty_name(inx, skill), num_to_faculty_description(inx, skill), inx] )
+	if len(options) == 0:
+		options.append( ["You have no skills currently.", "Eat minds to gain skills! Kill creatures to eat their minds.", 0])
+	triple_menu("SKILLS", options)
+
+	return None
+
+def controls_screen():
+	options = []
+
+	options.append("MOVE - ARROW KEYS")
+	single_screen("CONTROLS", options)
+	return None
+
 def handle_keys():
 	global key
 
 	if key.vk == libtcod.KEY_ESCAPE:
-		return 'exit'
+		return escape_menu()
 
 	if game_state == 'playing':
 		if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
@@ -1549,7 +1661,6 @@ def num_to_faculty_description(ind, magnitude=1):
 		return "You can cross over deep water."
 	if ind == 11:
 		return "With a bound, you can now vault over low obstacles."
-
 
 def make_faculty_list(mapping=0, parry=0, weapon=0, armor=0, first_aid=0, stealth=0, 
 	search=0, doors=0, run=0, dig=0, swim=0, vault=0):
