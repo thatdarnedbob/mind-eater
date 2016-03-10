@@ -202,7 +202,7 @@ def play_game():
 	while not libtcod.console_is_window_closed():
 		libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
 
-		render_all()
+		render_all_night()
 
 		libtcod.console_flush()
 
@@ -420,13 +420,9 @@ def monster_death(monster):
 	monster.send_to_back()
 
 def door_open_death(monster):
-	global fov_recompute
+	global fov_recompute, objects
 	log('You shatter the door with a mighty crash!', libtcod.yellow)
-	monster.char = 151
-	monster.fighter = None
-	monster.name = 'shattered door'
-	monster.color = libtcod.light_sepia
-	monster.send_to_back()
+	objects.remove(monster)
 	cur_map[monster.x][monster.y].change_type('wood floor')
 	#fov_recompute = True
 	initialize_fov()
@@ -492,46 +488,48 @@ class Tile:
 
 	def __init__(self, terrain='grass'):
 		self.type = terrain
-		(self.walkable, self.transparent, self.back, self.fore, self.char) = terrain_tile(terrain)
+		(self.walkable, self.transparent, self.stealth, self.back, self.fore, self.char) = terrain_tile(terrain)
 		self.explored = False
 
 	def change_type(self, terrain):
 		self.type = terrain
-		(self.walkable, self.transparent, self.back, self.fore, self.char) = terrain_tile(terrain)
+		(self.walkable, self.transparent, self.stealth, self.back, self.fore, self.char) = terrain_tile(terrain)
 
 def terrain_tile(terrain):
 	if terrain == 'grass':
-		return (True, True, libtcod.dark_green, libtcod.green, ' ')
+		return (True, True, False, libtcod.green, libtcod.green, '.')
 	if terrain == 'stone':
-		return (True, True, libtcod.dark_gray, libtcod.gray, ' ')
+		return (True, True, False, libtcod.gray, libtcod.gray, '.')
 	if terrain == 'stone wall':
-		return (False, False, libtcod.gray, libtcod.black, '#')
+		return (False, False, True, libtcod.darker_gray, libtcod.darker_gray, '#')
 	if terrain == 'village wall':
-		return (False, False, libtcod.dark_green, libtcod.dark_sepia, ' ')
+		return (False, False, True, libtcod.green, libtcod.sepia, '#')
 	if terrain == 'mud':
-		return (True, True, libtcod.darker_sepia, libtcod.sepia, ' ')
+		return (True, True, False, libtcod.sepia, libtcod.sepia, '.')
 	if terrain == 'tree':
-		return (False, False, libtcod.dark_green, libtcod.darker_green, 'T')
+		return (False, False, True, libtcod.green, libtcod.dark_green, 'T')
 	if terrain == 'sand':
-		return (True, True, libtcod.amber, libtcod.light_amber, ' ')
+		return (True, True, False, libtcod.light_amber, libtcod.light_amber, '.')
+	if terrain == 'shallow water':
+		return (True, True, True, libtcod.light_blue, libtcod.lighter_blue, '~')
 	if terrain == 'water':
-		return (False, True, libtcod.dark_blue, libtcod.blue, '~')
+		return (False, True, True, libtcod.darker_blue, libtcod.dark_blue, '~')
 	if terrain == 'crops':
-		return (True, True, libtcod.darkest_amber, libtcod.amber, 'C')
+		return (True, True, True, libtcod.sepia, libtcod.amber, 'C')
 	if terrain == 'fence':
-		return (False, True, libtcod.dark_green, libtcod.darker_sepia, '#')
+		return (False, True, False, libtcod.green, libtcod.dark_sepia, '#')
 	if terrain == 'low stone wall':
-		return (False, True, libtcod.dark_green, libtcod.light_gray, '#')
+		return (False, True, True, libtcod.green, libtcod.light_gray, '#')
 	if terrain == 'wood wall':
-		return (False, False, libtcod.darker_sepia, libtcod.sepia, ' ')
+		return (False, False, True, libtcod.dark_sepia, libtcod.dark_sepia, '#')
 	if terrain == 'wood floor':
-		return (True, True, libtcod.light_sepia, libtcod.darker_sepia, ' ')
+		return (True, True, False, libtcod.light_sepia, libtcod.light_sepia, '.')
 	if terrain == 'window':
-		return (False, True, libtcod.light_blue, libtcod.white, ' ')
+		return (False, True, True, libtcod.lightest_blue, libtcod.lightest_blue, '#')
 	if terrain == 'dirt road':
-		return (True, True, libtcod.dark_sepia, libtcod.darkest_sepia, ' ')
+		return (True, True, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
 	if terrain == 'gravestone':
-		return (False, True, libtcod.dark_green, libtcod.gray, 149)
+		return (False, True, True, libtcod.green, libtcod.gray, 149)
 
 def initialize_ascii_maps():
 	# we set the integers from 128 on up to be special graphics in our font file
@@ -1139,6 +1137,105 @@ def render_all():
 	#	libtcod.console_put_char(panel, PANEL_WIDTH - 1, y, 148)
 	#	libtcod.console_put_char(panel, LOG_X - 1, y, 148)
 
+
+	# create the player info panel
+	pmp = player.fighter.max_parries
+	ppl = player.fighter.parries_left
+	player_parries = "PARRIES:" + " X" * ppl
+	if player.fighter.rested:
+		player_parries += " /" + " -" * (pmp - ppl - 1)
+	else:
+		player_parries += " -" * (pmp - ppl)
+
+	if player.fighter.max_parries == 0:
+		player_parries += " UNSKILLED"
+
+	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, player_parries)
+
+	pmw = player.fighter.max_wounds
+	pwl = player.fighter.wounds 
+	player_wounds = "WOUNDS:" + " *" * pwl + " -" * (pmw - pwl)
+	libtcod.console_set_default_foreground(panel, libtcod.light_red)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, player_wounds)
+
+	# create the enemy info panel
+	if target is not None and target.fighter is not None:
+
+		tmp = target.fighter.max_parries
+		tpl = target.fighter.parries_left
+		target_parries = "PARRIES:" + " X" * tpl
+		if target.fighter.rested:
+			target_parries += " /" + " -" * (tmp - tpl - 1)
+		else:
+			target_parries += " -" * (tmp - tpl)
+		if target.fighter.max_parries == 0:
+			target_parries += " UNSKILLED"
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, target_parries)
+
+		tmw = target.fighter.max_wounds
+		twl = target.fighter.wounds
+		target_wounds = "WOUNDS:" + " *" * twl + " -" * (tmw - twl)
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_red)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_wounds)
+
+		libtcod.console_set_default_foreground(panel, libtcod.yellow)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y - 1, "TARGET: " + target.name.capitalize())
+	else:
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
+
+	# create the log panel
+	y = 0
+	for (line, color) in game_log[-1*LOG_HEIGHT:]:
+		libtcod.console_set_default_foreground(panel, color)
+		libtcod.console_print(panel, LOG_X, LOG_Y + y, line)
+		y += 1
+
+	libtcod.console_blit(panel, 0, 0, PANEL_WIDTH, PANEL_HEIGHT, 0, PANEL_X, PANEL_Y)
+
+def render_all_night():
+	global fov_map
+	global fov_recompute
+	global camera_x, camera_y
+
+	move_camera(player.x, player.y)
+
+	if fov_recompute:
+
+		fov_recompute = False
+		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, True, FOV_ALGO)
+		libtcod.console_clear(board)
+
+		for y in range(CAMERA_HEIGHT):
+			for x in range(CAMERA_WIDTH):
+				(map_x, map_y) = (camera_x + x, camera_y + y)
+				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
+
+				wall = not cur_map[map_x][map_y].transparent
+
+				if visible:
+					tile = cur_map[map_x][map_y]
+					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, libtcod.black)
+					if faculties[0]:
+						cur_map[map_x][map_y].explored = True
+				elif cur_map[map_x][map_y].explored:
+					# explored tile logic
+					tile = cur_map[map_x][map_y]
+					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore * 0.5, libtcod.black)
+
+
+	for obj in objects:
+		if obj is not player:
+			obj.draw()
+
+	player.draw()
+
+	libtcod.console_blit(board, camera_x, camera_y, curr_map_width, curr_map_height, 0, 0, 0)
+
+	libtcod.console_clear(panel)
 
 	# create the player info panel
 	pmp = player.fighter.max_parries
