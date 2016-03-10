@@ -41,12 +41,12 @@ PLAYER_INFO_HEIGHT = 2
 ENEMY_INFO_WIDTH = 23
 ENEMY_INFO_HEIGHT = 2
 ENEMY_INFO_X = 1
-ENEMY_INFO_Y = PLAYER_INFO_Y + PLAYER_INFO_HEIGHT + 1
+ENEMY_INFO_Y = PLAYER_INFO_Y + PLAYER_INFO_HEIGHT
 LOG_WIDTH = 34
 LOG_HEIGHT = 5
 LOG_LENGTH = 1000
 LOG_X = PLAYER_INFO_X + PLAYER_INFO_WIDTH + 1
-LOG_Y = 1
+LOG_Y = 0
 
 MENU_WIDTH = 40
 MENU_MAX_HEIGHT = 40
@@ -762,16 +762,6 @@ def make_village_map():
 		
 
 	objects.append(farmer(5,5))
-	objects.append(farmer(6,5))
-	objects.append(farmer(7,5))
-	objects.append(farmer(8,5))
-	objects.append(farmer(9,5))
-	objects.append(farmer(10,5))
-	objects.append(farmer(11,5))
-	objects.append(farmer(12,5))
-	objects.append(farmer(13,5))
-	player.x = 14
-	player.y = 5
 
 	stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
 	objects.append(stairs)
@@ -1187,17 +1177,17 @@ def render_all():
 			target_parries += " UNSKILLED"
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, target_parries)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
 
 		tmw = target.fighter.max_wounds
 		twl = target.fighter.wounds
 		target_wounds = "WOUNDS:" + " *" * twl + " -" * (tmw - twl)
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_red)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_wounds)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
 
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y - 1, "TARGET: " + target.name.capitalize())
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "TARGET: " + target.name.capitalize())
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
 
@@ -1286,17 +1276,17 @@ def render_all_night():
 			target_parries += " UNSKILLED"
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, target_parries)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
 
 		tmw = target.fighter.max_wounds
 		twl = target.fighter.wounds
 		target_wounds = "WOUNDS:" + " *" * twl + " -" * (tmw - twl)
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_red)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_wounds)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
 
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y - 1, "TARGET: " + target.name.capitalize())
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "TARGET: " + target.name.capitalize())
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
 
@@ -1415,7 +1405,9 @@ def triple_menu(title, options):
 
 def single_screen(title, options):
 
-	height = len(options)
+	title_height = libtcod.console_get_height_rect(0, 0, 0, MENU_WIDTH, MENU_MAX_HEIGHT, title)
+	
+	height = len(options) + title_height
 
 	menu = libtcod.console_new(MENU_WIDTH, height)
 
@@ -1430,22 +1422,16 @@ def single_screen(title, options):
 
 		libtcod.console_clear(menu)
 
-		title_height = libtcod.console_get_height_rect(0, 0, 0, MENU_WIDTH, MENU_MAX_HEIGHT, title)
-
 		# print the menu title
 		libtcod.console_print_rect_ex(menu, 0, 0, MENU_WIDTH, title_height, libtcod.BKGND_DEFAULT, libtcod.LEFT, title)
 
 		# print each option
 
 		y = title_height
-		letter_index = ord('a')
 
 		for option in options:
-			text = '(' + chr(letter_index) + ') ' + option
-			libtcod.console_print_ex(menu, 0, y, libtcod.BKGND_DEFAULT, libtcod.LEFT, text)
-
+			libtcod.console_print_ex(menu, 0, y, libtcod.BKGND_DEFAULT, libtcod.LEFT, option)
 			y += 1
-			letter_index += 1
 		
 		# then we blit this sucker onto the main screen.
 
@@ -1503,7 +1489,11 @@ def skills_menu():
 def controls_screen():
 	options = []
 
-	options.append("MOVE - ARROW KEYS")
+	options.append("Move - Arrow Keys")
+	options.append("Other Move - Num Pad")
+	options.append("Rest (Recover Parries) - Space")
+	options.append("Eat Minds - E")
+	options.append("Menu - Escape")
 	single_screen("CONTROLS", options)
 	return None
 
