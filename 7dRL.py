@@ -247,6 +247,10 @@ class Object:
 			self.mind.name = "The mind of a %s."%self.name
 			self.mind.desc = "This is a %s's mind. It has stuff."%self.name
 
+		if self.mind and self.fighter:
+			# otherwise, a fighter with the parry skill starts off not full.
+			self.fighter.parries_left = self.fighter.max_parries
+
 	def move(self, dx, dy):
 		new_x = self.x + dx
 		new_y = self.y + dy
@@ -381,7 +385,7 @@ def player_fighter():
 
 def player_mind():
 	# buffed for testing purposes
-	return Mind(make_faculty_list(mapping=0, parry=2))
+	return Mind(make_faculty_list(mapping=0, parry=1))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
@@ -756,7 +760,7 @@ def make_village_map():
 
 		
 
-	objects.append(farmer(5,5))
+	objects.append(buff_farmer(5,5))
 
 	stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
 	objects.append(stairs)
@@ -1218,7 +1222,7 @@ def render_all_night():
 				if visible:
 					tile = cur_map[map_x][map_y]
 					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, libtcod.black)
-					if faculties[0]:
+					if player.mind.skills[0]:
 						cur_map[map_x][map_y].explored = True
 				elif cur_map[map_x][map_y].explored:
 					# explored tile logic
@@ -1462,7 +1466,7 @@ def player_eat_mind():
 	available_minds = []
 
 	for obj in objects:
-		if obj.mind and obj.x == player.x and obj.y == player.y:
+		if obj.mind and obj.x == player.x and obj.y == player.y and obj is not player:
 			available_minds.append( [obj.mind.name, obj.mind.desc, obj.mind] )
 	# Now, choose mind from available_minds with a menu
 
@@ -1514,10 +1518,9 @@ def mindeating_menu(eaten_mind):
 	options = []
 
 	for i in range(len(player.mind.skills)):
-		mag = eaten_mind.skills[i]
-		if mag > player.mind.skills[i]:
+		if eaten_mind.skills[i] > player.mind.skills[i]:
 
-			options.append( [num_to_faculty_name(i, mag), num_to_faculty_description(i, mag), i] )
+			options.append( [num_to_faculty_name(i, player.mind.skills[i] + 1), num_to_faculty_description(i, player.mind.skills[i] + 1), i] )
 
 	if len(options) == 0:
 		eaten_mind.owner.mind = None
