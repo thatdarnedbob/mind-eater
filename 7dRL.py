@@ -1503,16 +1503,58 @@ def num_to_faculty_name(ind, magnitude=1):
 		return "Mapping"
 	if ind == 1:
 		return "Parry %i" % magnitude
+	if ind == 2:
+		return "Weapon Use"
+	if ind == 3:
+		return "Armor Use"
+	if ind == 4:
+		return "First Aid %i" % magnitude
+	if ind == 5:
+		return "Stealth"
+	if ind == 6:
+		return "Searching"
+	if ind == 7:
+		return "Open Doors"
+	if ind == 8:
+		return "Running"
+	if ind == 9:
+		return "Digging"
+	if ind == 10:
+		return "Swimming"
+	if ind == 11:
+		return "Vaulting"
 
 def num_to_faculty_description(ind, magnitude=1):
 	if ind == 0:
 		return "With this, you can remember what terrain you've seen."
 	if ind == 1:
 		return "Each parry lets you block one more attack. Stand still to regain parries slowly."
+	if ind == 2:
+		return "You can use weapons. Weapons are essential to proper parrying, and some do more damage than your limbs."
+	if ind == 3:
+		return "You can now wear armor, just like the filth you hunt. It reduces the damage from each landed blow."
+	if ind == 4:
+		return "This much knowledge of first aid lets you regain a wound if you have %i or fewer left. Not for combat use!"
+	if ind == 5:
+		return "You can duck down to hide behind or in low obstructions."
+	if ind == 6:
+		return "You can see things that are hiding behind or in low obstructions."
+	if ind == 7:
+		return "You can open doors without making a racket."
+	if ind == 8:
+		return "You can run at the cost of your defenses. Press r to convert parries into extra spaces of movement."
+	if ind == 9:
+		return "You can go to where the bodies are buried..."
+	if ind == 10:
+		return "You can cross over deep water."
+	if ind == 11:
+		return "With a bound, you can now vault over low obstacles."
 
-def make_faculty_list(mapping=0, parry=0):
 
-	return [mapping, parry]
+def make_faculty_list(mapping=0, parry=0, weapon=0, armor=0, first_aid=0, stealth=0, 
+	search=0, doors=0, run=0, dig=0, swim=0, vault=0):
+
+	return [mapping, parry, weapon, armor, first_aid, stealth, search, doors, run, dig, swim, vault]
 
 def mindeating_menu(eaten_mind):
 	options = []
