@@ -59,7 +59,7 @@ LIMIT_FPS = 25
 FOV_ALGO = 0
 
 
-TORCH_RADIUS = 6
+TORCH_RADIUS = 16
 
 curr_map_width = 102
 curr_map_height = 102
@@ -437,6 +437,10 @@ def door(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, xp = 0, death_function=door_open_death)
 	return Object(x, y, 150, 'door', libtcod.sepia, walkable=True, always_visible=True, fighter=fighter_comp)
 
+def gate(x, y):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, xp = 0, death_function=gate_open_death)
+	return Object(x, y, 150, 'gate', libtcod.dark_sepia, walkable=False, always_visible=True, fighter=fighter_comp)
+
 def player_death(player):
 	# the game is over
 	global game_state
@@ -457,13 +461,20 @@ def monster_death(monster):
 	monster.send_to_back()
 
 def door_open_death(monster):
-	global fov_recompute, objects
+	global objects
 	log('You shatter the door with a mighty crash!', libtcod.yellow)
 	monster.fighter = None
 	objects.remove(monster)
 	cur_map[monster.x][monster.y].change_type('wood floor')
-	#fov_recompute = True
 	initialize_fov()
+
+def gate_open_death(monster):
+	global objects
+	log('You smash through the gate with a mighty crash!', libtcod.yellow)
+	monster.fighter = None
+	objects.remove(monster)
+	cur_map[monster.x][monster.y].change_type('grass')
+
 
 def get_all_buffs(buffed):
 	# implement buffs later
@@ -773,11 +784,13 @@ def make_village_map():
 		tile_types.append(3)
 	for x in range(tot_tiles / 25):
 		tile_types.append(4)
+	for x in range(tot_tiles / 20):
+		tile_types.append(5)
 
 	random.shuffle(tile_types)
 
 	for x in range(tot_tiles - len(tile_types)):
-		tile_types.append(roll(0,4))
+		tile_types.append(roll(0,5))
 
 	tile_types.reverse()
 
@@ -787,14 +800,16 @@ def make_village_map():
 
 		if choice == 0:
 			place_copse(tile[0], tile[1], VILLAGE_TILE_SIZE)
-		if choice == 1:
+		elif choice == 1:
 			place_pond(tile[0], tile[1], VILLAGE_TILE_SIZE)
-		if choice == 2:
+		elif choice == 2:
 			place_field(tile[0], tile[1], VILLAGE_TILE_SIZE)
-		if choice == 3:
+		elif choice == 3:
 			place_cottage(tile[0], tile[1], VILLAGE_TILE_SIZE)
-		if choice == 4:
+		elif choice == 4:
 			place_graves(tile[0], tile[1], VILLAGE_TILE_SIZE)
+		elif choice == 5:
+			place_pens(tile[0], tile[1], VILLAGE_TILE_SIZE)
 
 
 	#stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
@@ -929,7 +944,7 @@ def place_cottage(xpos, ypos, tile_size):
 		rectangle_place_gaps(wall_start_x, wall_start_y, wall_total_w, wall_total_h, 'grass',
 			[chance(1,2),chance(1,2),chance(1,2),chance(1,2)], at_least_one=False)
 
-	occupants = roll(2,4)
+	occupants = roll(1,3)
 	while occupants > 0:
 		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
 		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
@@ -947,6 +962,14 @@ def place_cottage(xpos, ypos, tile_size):
 				objects.append(guard(xpos, ypos))
 			occupants -= 1
 
+	num_dogs = roll(1,3)
+
+	while num_dogs > 0:
+		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
+		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
+		if is_walkable(xpos, ypos):
+			objects.append(dog(xpos, ypos))
+		num_dogs -= 1
 
 	door_wall = roll(0,3)
 
@@ -994,6 +1017,86 @@ def place_graves(xpos, ypos, tile_size):
 				if chance(2,7):
 					cur_map[x][y].change_type('gravestone')
 					cur_map[x][y+1].change_type('mud')
+
+def place_pens(xpos, ypos, tile_size):
+	global cur_map, objects
+
+	x1 = roll(0, tile_size / 2)
+	x2 = roll(x1 + 6, tile_size - 4)
+	x3 = roll(0, tile_size - 3)
+
+	y1 = roll(0, tile_size / 2)
+	y2 = roll(0, tile_size / 2)
+	y3 = roll(max(y1, y2) + 6, tile_size - 4)
+
+	w1 = x2 - x1 - 2 # 8. need to be at least 4. x2 is great than x1 + 6
+	w2 = roll(4, tile_size - x2) # 4 to 10
+	w3 = roll(4, tile_size - x3) # 4 to 20
+
+	h1 = y3 - y1 - 2 # 8
+	h2 = y3 - y2 - 2 # 8
+	h3 = roll(4, tile_size - y3) # 4 to 20
+
+	build_single_wall(xpos + x1, ypos + y1, w1, h1, 'fence')
+	build_single_wall(xpos + x2, ypos + y2, w2, h2, 'fence')
+	build_single_wall(xpos + x3, ypos + y3, w3, h3, 'fence')
+
+	cows = chance(1, 3)
+
+	animals = roll(2,4)
+
+	while animals > 0:
+		ani_x = roll(x1 + 1, x1 + w1 - 1) + xpos
+		ani_y = roll(y1 + 1, y1 + h1 - 1) + ypos
+
+		if is_walkable(ani_x, ani_y):
+			if cows:
+				objects.append(cow(ani_x, ani_y))
+				animals -= 1
+			else:
+				objects.append(chicken(ani_x, ani_y))
+				animals -= 1
+		elif cur_map[ani_x][ani_y].type == 'tree':
+			cur_map[ani_x][ani_y].change_type('grass')
+		print(animals)
+
+	cows = chance(1, 3)
+
+	animals = roll(2,4)
+
+	while animals > 0:
+		ani_x = roll(x2 + 1, x2 + w2 - 1) + xpos
+		ani_y = roll(y2 + 1, y2 + h2 - 1) + ypos
+
+		if is_walkable(ani_x, ani_y):
+			if cows:
+				objects.append(cow(ani_x, ani_y))
+				animals -= 1
+			else:
+				objects.append(chicken(ani_x, ani_y))
+				animals -= 1
+		elif cur_map[ani_x][ani_y].type == 'tree':
+			cur_map[ani_x][ani_y].change_type('grass')
+		print(animals)
+
+	cows = chance(1, 3)
+
+	animals = roll(2, 4)
+
+	while animals > 0:
+		ani_x = roll(x3 + 1, x3 + w3 - 1) + xpos
+		ani_y = roll(y3 + 1, y3 + h3 - 1) + ypos
+
+		if is_walkable(ani_x, ani_y):
+			if cows:
+				objects.append(cow(ani_x, ani_y))
+				animals -= 1
+			else:
+				objects.append(chicken(ani_x, ani_y))
+				animals -= 1
+		elif cur_map[ani_x][ani_y].type == 'tree':
+			cur_map[ani_x][ani_y].change_type('grass')
+		print(animals)	
 
 def radial_tile_paint(radius, xpos, ypos, terrain):
 	# This only respects the boundaries of the current map, not your current terrain.
@@ -1065,7 +1168,7 @@ def rectangle_place_gaps(xpos, ypos, w, h, terrain, which_walls=[True, True, Tru
 
 def build_single_wall(xpos, ypos, w, h, terrain):
 	global cur_map
-	#rectangle_tile_trim(xpos, ypos, w, h, terrain)
+
 	for x in range(xpos, xpos+w):
 		cur_map[x][ypos].change_type(terrain)
 		cur_map[x][ypos+h-1].change_type(terrain)
