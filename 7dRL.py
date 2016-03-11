@@ -59,7 +59,7 @@ LIMIT_FPS = 25
 FOV_ALGO = 0
 
 
-TORCH_RADIUS = 10
+TORCH_RADIUS = 6
 
 curr_map_width = 102
 curr_map_height = 102
@@ -383,19 +383,55 @@ def player_fighter():
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(mapping=0, parry=0))
+	return Mind(make_faculty_list(mapping=1, parry=6))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
-	mind_comp = Mind(make_faculty_list(mapping = 1, parry=1))
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, first_aid=1, doors=1, dig=1))
 	return Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 
-def buff_farmer(x, y):
+def lumber_worker(x, y):
+	fighter_comp = Fighter(wounds = 2, defense = 0, power = 1, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, doors=1))
+	return Object(x, y, 'L', 'lumberjack', libtcod.sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def hunter(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
-	mind_comp = Mind(make_faculty_list(mapping = 1, parry=3))
-	return Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1))
+	return Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def fisherman(x, y):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(mapping=1, doors=1, swim=1))
+	return Object(x, y, 'A', 'angler', libtcod.light_blue, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def guard(x, y):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, armor=1, doors=1, run=1))
+	return Object(x, y, 'G', 'guard', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def cow(x, y):
+	fighter_comp = Fighter(wounds = 6, defense = 0, power = 1, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(run=1, vault=1))
+	return Object(x, y, 'C', 'cow', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def chicken(x, y):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(search=2, dig=1))
+	return Object(x, y, 'c', 'chicken', libtcod.dark_orange, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+
+def dog(x, y):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, xp = 0, death_function=monster_death)
+	ai_comp = BasicAI()
+	mind_comp = Mind(make_faculty_list(mapping=1, stealth=1, search=2, run=1, dig=1, swim=1, vault=1))
+	return Object(x, y, 'd', 'dog', libtcod.light_sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 
 def door(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, xp = 0, death_function=door_open_death)
@@ -524,10 +560,13 @@ def terrain_tile(terrain):
 		return (False, True, True, libtcod.green, libtcod.light_gray, '#')
 	if terrain == 'wood wall':
 		return (False, False, True, libtcod.dark_sepia, libtcod.dark_sepia, '#')
+	if terrain == 'weak hinges':
+		# the name here is a cludge to make things look nice. This is the tile for a door to sit on.
+		return (True, False, True, libtcod.dark_sepia, libtcod.dark_sepia, ' ')
 	if terrain == 'wood floor':
 		return (True, True, False, libtcod.light_sepia, libtcod.light_sepia, '.')
 	if terrain == 'window':
-		return (False, True, True, libtcod.lightest_blue, libtcod.lightest_blue, '#')
+		return (False, True, True, libtcod.light_blue, libtcod.light_blue, '#')
 	if terrain == 'dirt road':
 		return (True, True, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
 	if terrain == 'gravestone':
@@ -747,8 +786,7 @@ def make_village_map():
 		choice = tile_types.pop()
 
 		if choice == 0:
-			place_trees(tile[0], tile[1], VILLAGE_TILE_SIZE)
-			place_trees(tile[0], tile[1], VILLAGE_TILE_SIZE)
+			place_copse(tile[0], tile[1], VILLAGE_TILE_SIZE)
 		if choice == 1:
 			place_pond(tile[0], tile[1], VILLAGE_TILE_SIZE)
 		if choice == 2:
@@ -758,9 +796,6 @@ def make_village_map():
 		if choice == 4:
 			place_graves(tile[0], tile[1], VILLAGE_TILE_SIZE)
 
-		
-
-	objects.append(farmer(5,5))
 
 	#stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
 	#objects.append(stairs)
@@ -777,10 +812,42 @@ def place_stone_patch(xpos, ypos):
 
 def place_trees(xpos, ypos, tile_size):
 	global cur_map
-	for x in range(tile_size / 50, roll(tile_size / 50, tile_size / 10)):
-		xoff = xpos + roll(0,tile_size)
-		yoff = ypos + roll(0,tile_size)
+	tile_area = tile_size * tile_size
+	for x in range(tile_area / 50, roll(tile_area / 50, tile_area / 10)):
+		xoff = xpos + roll(0,tile_size - 1)
+		yoff = ypos + roll(0,tile_size - 1)
 		cur_map[xoff][yoff].change_type('tree')
+
+def place_copse(xpos, ypos, tile_size):
+	global cur_map, objects
+
+	num_copses = roll(3, tile_size / 3)
+	for i in range(num_copses):
+		place_trees(xpos, ypos, tile_size)
+
+	jacks = chance(2,3)
+	hunters = chance(1,3)
+	if jacks:
+		num_jacks = roll(1,3)
+
+		while num_jacks > 0:
+			jack_x = roll(xpos, xpos + tile_size - 1)
+			jack_y = roll(ypos, ypos + tile_size - 1)
+
+			if is_walkable(jack_x, jack_y):
+				objects.append(lumber_worker(jack_x, jack_y))
+				num_jacks -= 1
+
+	if hunters:
+		num_hunters = roll(1,3)
+
+		while num_hunters > 0:
+			hunt_x = roll(xpos, xpos + tile_size - 1)
+			hunt_y = roll(ypos, ypos + tile_size - 1)
+
+			if is_walkable(hunt_x, hunt_y):
+				objects.append(hunter(hunt_x, hunt_y))
+				num_hunters -= 1
 
 def place_pond(xpos, ypos, tile_size):
 	global cur_map
@@ -790,8 +857,19 @@ def place_pond(xpos, ypos, tile_size):
 	centery = roll(ypos+1+radius, ypos + tile_size - 2 - radius)
 
 	radial_tile_paint(radius + 1, centerx, centery, 'sand')
-	radial_tile_paint(radius, centerx, centery, 'water')
-	
+	radial_tile_paint(radius, centerx, centery, 'shallow water')
+	radial_tile_paint(radius - 1, centerx, centery, 'water')
+
+	num_fishers = roll(1,3)
+
+	while num_fishers > 0:
+		fish_x = roll(xpos, xpos + tile_size - 1)
+		fish_y = roll(ypos, ypos + tile_size - 1)
+
+		if is_walkable(fish_x, fish_y):
+			objects.append(fisherman(fish_x, fish_y))
+			num_fishers -= 1
+
 def place_field(xpos, ypos, tile_size):
 	global cur_map
 
@@ -807,6 +885,16 @@ def place_field(xpos, ypos, tile_size):
 
 	rectangle_place_gaps(xoff - 1, yoff - 1, width + 2, height + 2, 'grass',
 		[chance(1,4), chance(1,4), chance(1,4), chance(1,4)])
+
+	num_farmers = roll(2,4)
+
+	while num_farmers > 0:
+		farm_x = roll(xoff, xoff + width - 1)
+		farm_y = roll(yoff, yoff + height - 1)
+
+		if is_walkable(farm_x, farm_y):
+			objects.append(farmer(farm_x, farm_y))
+			num_farmers -= 1
 
 def place_cottage(xpos, ypos, tile_size):
 	global cur_map, objects
@@ -841,6 +929,25 @@ def place_cottage(xpos, ypos, tile_size):
 		rectangle_place_gaps(wall_start_x, wall_start_y, wall_total_w, wall_total_h, 'grass',
 			[chance(1,2),chance(1,2),chance(1,2),chance(1,2)], at_least_one=False)
 
+	occupants = roll(2,4)
+	while occupants > 0:
+		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
+		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
+		if is_walkable(xpos, ypos):
+			which = roll(0,4)
+			if which == 0:
+				objects.append(farmer(xpos, ypos))
+			elif which == 1:
+				objects.append(hunter(xpos, ypos))
+			elif which == 2:
+				objects.append(lumber_worker(xpos, ypos))
+			elif which == 3:
+				objects.append(fisherman(xpos, ypos))
+			elif which == 4:
+				objects.append(guard(xpos, ypos))
+			occupants -= 1
+
+
 	door_wall = roll(0,3)
 
 	if door_wall == 0:
@@ -856,8 +963,10 @@ def place_cottage(xpos, ypos, tile_size):
 		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
 		xpos = cottage_start_x + cottage_w - 1
 
-	objects.append(door(xpos, ypos))
-	cur_map[xpos][ypos].change_type('wood wall')
+	new_door = door(xpos, ypos)
+	objects.append(new_door)
+	new_door.send_to_back()
+	cur_map[xpos][ypos].change_type('weak hinges')
 
 def place_graves(xpos, ypos, tile_size):
 	# build a low stone wall, with gaps. Place in it some graves, which are headstones with patches of dirt or grass below them
