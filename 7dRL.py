@@ -974,22 +974,22 @@ def place_cottage(xpos, ypos, tile_size):
 	door_wall = roll(0,3)
 
 	if door_wall == 0:
-		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
-		ypos = cottage_start_y
+		door_x = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
+		door_y = cottage_start_y
 	elif door_wall == 1:
-		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
-		xpos = cottage_start_x
+		door_y = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
+		door_x = cottage_start_x
 	elif door_wall == 2:
-		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
-		ypos = cottage_start_y + cottage_h - 1
+		door_x = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
+		door_y = cottage_start_y + cottage_h - 1
 	elif door_wall == 3:
-		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
-		xpos = cottage_start_x + cottage_w - 1
+		door_y = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
+		door_x = cottage_start_x + cottage_w - 1
 
-	new_door = door(xpos, ypos)
+	new_door = door(door_x, door_y)
 	objects.append(new_door)
 	new_door.send_to_back()
-	cur_map[xpos][ypos].change_type('weak hinges')
+	cur_map[door_x][door_y].change_type('weak hinges')
 
 def place_graves(xpos, ypos, tile_size):
 	# build a low stone wall, with gaps. Place in it some graves, which are headstones with patches of dirt or grass below them
@@ -1023,80 +1023,65 @@ def place_pens(xpos, ypos, tile_size):
 
 	x1 = roll(0, tile_size / 2)
 	x2 = roll(x1 + 6, tile_size - 4)
-	x3 = roll(0, tile_size - 3)
+	x3 = roll(0, tile_size - 4)
 
 	y1 = roll(0, tile_size / 2)
 	y2 = roll(0, tile_size / 2)
 	y3 = roll(max(y1, y2) + 6, tile_size - 4)
 
-	w1 = x2 - x1 - 2 # 8. need to be at least 4. x2 is great than x1 + 6
-	w2 = roll(4, tile_size - x2) # 4 to 10
-	w3 = roll(4, tile_size - x3) # 4 to 20
+	w1 = x2 - x1 - 2
+	w2 = roll(4, tile_size - x2)
+	w3 = roll(4, tile_size - x3)
 
-	h1 = y3 - y1 - 2 # 8
-	h2 = y3 - y2 - 2 # 8
-	h3 = roll(4, tile_size - y3) # 4 to 20
+	h1 = y3 - y1 - 2
+	h2 = y3 - y2 - 2
+	h3 = roll(4, tile_size - y3)
 
-	build_single_wall(xpos + x1, ypos + y1, w1, h1, 'fence')
-	build_single_wall(xpos + x2, ypos + y2, w2, h2, 'fence')
-	build_single_wall(xpos + x3, ypos + y3, w3, h3, 'fence')
+	x = [x1, x2, x3]
+	y = [y1, y2, y3]
+	w = [w1, w2, w3]
+	h = [h1, h2, h3]
 
-	cows = chance(1, 3)
+	for i in range(3):
+		build_single_wall(xpos + x[i], ypos + y[i], w[i], h[i], 'fence')
 
-	animals = roll(2,4)
+		cows = chance(1,3)
 
-	while animals > 0:
-		ani_x = roll(x1 + 1, x1 + w1 - 1) + xpos
-		ani_y = roll(y1 + 1, y1 + h1 - 1) + ypos
+		animals = roll(2,4)
 
-		if is_walkable(ani_x, ani_y):
-			if cows:
-				objects.append(cow(ani_x, ani_y))
+		while animals >0:
+			ani_x = roll(x[i] + 1, x[i] + w[i] - 2) + xpos
+			ani_y = roll(y[i] + 1, y[i] + h[i] - 2) + ypos
+
+			if is_walkable(ani_x, ani_y):
+				if cows:
+					objects.append(cow(ani_x, ani_y))
+				else:
+					objects.append(chicken(ani_x, ani_y))
 				animals -= 1
-			else:
-				objects.append(chicken(ani_x, ani_y))
-				animals -= 1
-		elif cur_map[ani_x][ani_y].type == 'tree':
-			cur_map[ani_x][ani_y].change_type('grass')
-		print(animals)
+			elif cur_map[ani_x][ani_y].type == 'tree':
+				cur_map[ani_x][ani_y].change_type('grass')
 
-	cows = chance(1, 3)
+		gate_wall = roll(0,3)
 
-	animals = roll(2,4)
+		if gate_wall == 0:
+			gate_x = roll(1, w[i] - 2) + x[i] + xpos
+			gate_y = ypos + y[i]
+		elif gate_wall == 1:
+			gate_x = x[i] + xpos
+			gate_y = roll(1, h[i] - 2) + y[i] + ypos
+		elif gate_wall == 2:
+			gate_x = roll(1, w[i] - 2) + x[i] + xpos
+			gate_y = ypos + y[i] + h[i] - 1
+		elif gate_wall == 3:
+			gate_x = x[i] + w[i] + xpos - 1
+			gate_y = roll(1, h[i] - 2) + y[i] + ypos
 
-	while animals > 0:
-		ani_x = roll(x2 + 1, x2 + w2 - 1) + xpos
-		ani_y = roll(y2 + 1, y2 + h2 - 1) + ypos
+		new_gate = gate(gate_x, gate_y)
+		objects.append(new_gate)
+		new_gate.send_to_back()
 
-		if is_walkable(ani_x, ani_y):
-			if cows:
-				objects.append(cow(ani_x, ani_y))
-				animals -= 1
-			else:
-				objects.append(chicken(ani_x, ani_y))
-				animals -= 1
-		elif cur_map[ani_x][ani_y].type == 'tree':
-			cur_map[ani_x][ani_y].change_type('grass')
-		print(animals)
 
-	cows = chance(1, 3)
-
-	animals = roll(2, 4)
-
-	while animals > 0:
-		ani_x = roll(x3 + 1, x3 + w3 - 1) + xpos
-		ani_y = roll(y3 + 1, y3 + h3 - 1) + ypos
-
-		if is_walkable(ani_x, ani_y):
-			if cows:
-				objects.append(cow(ani_x, ani_y))
-				animals -= 1
-			else:
-				objects.append(chicken(ani_x, ani_y))
-				animals -= 1
-		elif cur_map[ani_x][ani_y].type == 'tree':
-			cur_map[ani_x][ani_y].change_type('grass')
-		print(animals)	
 
 def radial_tile_paint(radius, xpos, ypos, terrain):
 	# This only respects the boundaries of the current map, not your current terrain.
