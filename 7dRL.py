@@ -15,19 +15,19 @@ CAMERA_HEIGHT = 43
 
 # format of bottom half of screen:
 #-----------------------#----------------------------------#
-#                       #                                  #
-#                       #                                  #
-#abcdefghijklmnopqrstubw#                                  #
-#                       #                                  #
-#                       #                                  #
+#PLAYER PARRIES         #                                  #
+#PLAYER WOUNDS          #                                  #
+#TARGET NAME            #                                  #
+#TARGET PARRIES         #                                  #
+#TARGET WOUNDS          #                                  #
 #abcdefghijklmnopqrstubw#abcdefghijklmnopqrstuvwxyzABCDEFGH#
 #
-# note: border at top line, middle line, bottom line,
+# note: # and - is empty space, but is a real border.
 # column 1 (0), column 25 (24), column 60 (59)
 # Height = 7
 # player info height = 2, width = 23
-# enemy info height = 2, width = 23
-# log height = 5, width = width = 34
+# enemy info height = 3, width = 23
+# log height = 6, width = 34
 # all positional variables, except for the entire panel, are relative to the panel's top left corner!
 
 PANEL_X = 0
@@ -46,13 +46,10 @@ LOG_WIDTH = 34
 LOG_HEIGHT = 5
 LOG_LENGTH = 1000
 LOG_X = PLAYER_INFO_X + PLAYER_INFO_WIDTH + 1
-LOG_Y = 0
+LOG_Y = 1
 
 MENU_WIDTH = 40
 MENU_MAX_HEIGHT = 40
-
-VILLAGE_WIDTH = 102
-VILLAGE_HEIGHT = 102
 
 VILLAGE_TILES_HIGH = 5
 VILLAGE_TILES_WIDE = 5
@@ -134,7 +131,7 @@ def new_game():
 
 	# create player
 
-	player = Object(0, 0, '@', 'player', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter(), mind=player_mind())
+	player = Object(0, 0, '@', 'the Mind Eater', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter(), mind=player_mind())
 	target = None
 
 	make_village_map()
@@ -157,14 +154,15 @@ def save_game():
 	file['cur_map'] = cur_map
 	file['objects'] = objects
 	file['player_index'] = objects.index(player)
-	file['stairs_index'] = objects.index(stairs)
+	#file['stairs_index'] = objects.index(stairs)
 	file['game_state'] = game_state
 	file['game_log'] = game_log
 
 	file.close()
 
 def load_game():
-	global cur_map, objects, player, stairs, game_state, game_log
+	global cur_map, objects, player, game_state, game_log
+	# stairs
 	# set state
 
 	if not os.path.isfile('savegame'):
@@ -175,7 +173,7 @@ def load_game():
 	cur_map = file['cur_map']
 	objects = file['objects']
 	player = objects[file['player_index']]
-	stairs = objects[file['stairs_index']]
+	#stairs = objects[file['stairs_index']]
 	game_state = file['game_state']
 	game_log = file['game_log']
 
@@ -419,7 +417,7 @@ def monster_death(monster):
 	monster.walkable = True
 	monster.fighter = None
 	monster.ai = None
-	monster.name = 'remains of '
+	monster.name = 'remains of a ' + monster.name
 	monster.send_to_back()
 
 def door_open_death(monster):
@@ -593,7 +591,7 @@ def initialize_ascii_maps():
 	libtcod.console_map_ascii_code_to_font(151, 11, 13)
 
 def make_map():
-	global cur_map, objects, stairs
+	global cur_map, objects#, stairs
 
 	objects = [player]
 
@@ -618,13 +616,14 @@ def make_map():
 
 	# we can generate objects here.
 
-	stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white)
-	objects.append(stairs)
-	stairs.send_to_back()
+	#stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white)
+	#objects.append(stairs)
+	#stairs.send_to_back()
 
 def make_village_map():
-	global cur_map, objects, stairs, curr_map_height, curr_map_width, board
+	global cur_map, objects, curr_map_height, curr_map_width, board
 
+	# stairs
 	# a village map - a set of tiles, all enclosed by a wall.
 
 	curr_map_height = VILLAGE_TILES_HIGH * VILLAGE_TILE_SIZE + 2
@@ -763,9 +762,9 @@ def make_village_map():
 
 	objects.append(farmer(5,5))
 
-	stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
-	objects.append(stairs)
-	stairs.send_to_back()
+	#stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
+	#objects.append(stairs)
+	#stairs.send_to_back()
 
 def place_stone_patch(xpos, ypos):
 	global cur_map
@@ -1075,6 +1074,33 @@ def to_camera_coordinates(x, y):
 
 	return (x, y)
 
+def get_names_under_mouse():
+	global mouse, target
+
+	(x, y) = (mouse.cx, mouse.cy)
+	(x, y) = (camera_x + x, camera_y + y)
+
+	names = []
+
+	if libtcod.map_is_in_fov(fov_map, x, y):
+		for obj in objects: 
+			if obj.x == x and obj.y == y:
+				names.append(obj.name)
+
+				if mouse.lbutton_pressed and obj is not player:
+					target = obj
+		
+		if len(names) > 0:
+			names.append('on')
+
+	names = ', '.join(names)
+	if libtcod.map_is_in_fov(fov_map, x, y):
+		if len(names) > 0: 
+			names += " "
+		names += cur_map[x][y].type
+
+	return names.capitalize()
+
 def log(new_log, color = libtcod.white):
 	# split the log enter, if necessary, across multiple lines
 	new_log_lines = textwrap.wrap(new_log, LOG_WIDTH)
@@ -1128,20 +1154,6 @@ def render_all():
 
 	libtcod.console_clear(panel)
 
-	# create the lower panel frame. Not actually wanted...
-	# libtcod.console_set_default_foreground(panel, libtcod.light_fuchsia)
-	#for x in range(0, PANEL_WIDTH):
-	#	libtcod.console_put_char(panel, x, 0, 148)
-	#	libtcod.console_put_char(panel, x, PANEL_HEIGHT - 1, 148)
-	#for x in range(1, PLAYER_INFO_WIDTH + 1):
-	#	libtcod.console_put_char(panel, x, PLAYER_INFO_Y + PLAYER_INFO_HEIGHT, 148)
-
-	#for y in range(0, PANEL_HEIGHT):
-	#	libtcod.console_put_char(panel, 0, y, 148)
-	#	libtcod.console_put_char(panel, PANEL_WIDTH - 1, y, 148)
-	#	libtcod.console_put_char(panel, LOG_X - 1, y, 148)
-
-
 	# create the player info panel
 	pmp = player.fighter.max_parries
 	ppl = player.fighter.parries_left
@@ -1190,6 +1202,9 @@ def render_all():
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "TARGET: " + target.name.capitalize())
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
+
+	libtcod.console_set_default_foreground(panel, libtcod.yellow)
+	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
 
 	# create the log panel
 	y = 0
@@ -1290,6 +1305,9 @@ def render_all_night():
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
 
+	libtcod.console_set_default_foreground(panel, libtcod.yellow)
+	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
+	
 	# create the log panel
 	y = 0
 	for (line, color) in game_log[-1*LOG_HEIGHT:]:
@@ -1666,6 +1684,7 @@ def mindeating_menu(eaten_mind):
 			options.append( [num_to_faculty_name(i, player.mind.skills[i] + 1), num_to_faculty_description(i, player.mind.skills[i] + 1), i] )
 
 	if len(options) == 0:
+		eaten_mind.owner.name += ", mindless"
 		eaten_mind.owner.mind = None
 		log('This mind had nothing new in it! Disgusting!', libtcod.red)
 		return -1
@@ -1676,6 +1695,7 @@ def mindeating_menu(eaten_mind):
 		log('You resist the urge to eat this mind...', libtcod.blue)
 		return -1
 
+	eaten_mind.owner.name += ", mindless"
 	eaten_mind.owner.mind = None
 
 	return choice
