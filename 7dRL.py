@@ -92,9 +92,9 @@ def main_menu():
 
 		# We present the main menu
 
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 3, "a) New Game")
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 1, "b) Continue")
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 + 1, "c) Exit")
+		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 3, 'a) New Game')
+		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 1, 'b) Continue')
+		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 + 1, 'c) Exit')
 
 
 		# this sends everything from the console to the screen.
@@ -138,7 +138,7 @@ def new_game():
 
 	game_log = []
 
-	log("YOU ARE THE MIND EATER", libtcod.red)
+	log('YOU ARE THE MIND EATER', libtcod.red)
  
 	game_state = 'playing'
 
@@ -248,8 +248,8 @@ class Object:
 		self.mind = mind
 		if self.mind:
 			self.mind.owner = self
-			self.mind.name = "The mind of a %s."%self.name
-			self.mind.desc = "This is a %s's mind. It has stuff."%self.name
+			self.mind.name = 'The mind of a %s.'%self.name
+			self.mind.desc = 'This is a %s\'s mind. It has stuff.'%self.name
 
 		self.inventory = []
 
@@ -319,7 +319,7 @@ class Object:
 				libtcod.console_set_char_foreground(board, self.x, self.y, self.color)
 				libtcod.console_set_char(board, self.x, self.y, self.char)
 
-		# show if it's set to "always visible" and on an explored tile
+		# show if it's set to 'always visible' and on an explored tile
 		elif self.always_visible and cur_map[self.x][self.y].explored:
 			(x, y) = to_camera_coordinates(self.x, self.y)
 
@@ -533,8 +533,8 @@ class Buff:
 class Mind:
 	def __init__(self, skills):
 		self.skills = skills
-		self.name = ""
-		self.desc = ""
+		self.name = ''
+		self.desc = ''
 
 class BasicAI:
 	# This is AI for a creature that just moves toward the player if it sees them, and tries to attack
@@ -595,12 +595,12 @@ class Item():
 
 		if len(picker.inventory) > 25:
 			if picker is player:
-				log("Your inventory is full, can't pick this" + self.owner.name + "up", libtcod.red)
+				log('Your inventory is full, can\'t pick this' + self.owner.name + 'up', libtcod.red)
 		else:
 			picker.inventory.append(self.owner)
 			objects.remove(self.owner)
 			if picker is player:
-				log("You picked up a " + self.owner.name + '!', libtcod.green)
+				log('You picked up a ' + self.owner.name + '!', libtcod.green)
 			if self.equippable and picker.get_equipped_in_slot(self.slot) is None:
 				self.equip(picker)
 
@@ -643,17 +643,17 @@ class Item():
 		self.equipped = True
 
 		if user is player:
-			log("Equipped a " + self.owner.name + " as " + self.slot + ".", libtcod.light_green)
+			log('Equipped a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_green)
 
 	def unequip(self, user):
 		if not self.equipped:
 			return None
 		self.equipped = False
 		if user is player:
-			log("Stopped equipping a " + self.owner.name + " as " + self.slot + ".", libtcod.light_red)
+			log('Stopped equipping a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_red)
 
 def no_use():
-	log("This thing isn't actually usable.")
+	log('This thing isn\'t actually usable.')
 
 def sword(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='weapon', power_bonus=1)
@@ -1430,7 +1430,7 @@ def get_names_under_mouse():
 	names = ', '.join(names)
 	if libtcod.map_is_in_fov(fov_map, x, y):
 		if len(names) > 0: 
-			names += " "
+			names += ' '
 		names += cur_map[x][y].type
 
 	return names.capitalize()
@@ -1491,21 +1491,21 @@ def render_all():
 	# create the player info panel
 	pmp = player.fighter.max_parries
 	ppl = player.fighter.parries_left
-	player_parries = "PARRIES:" + " X" * ppl
+	player_parries = 'PARRIES:' + ' X' * ppl
 	if player.fighter.rested:
-		player_parries += " /" + " -" * (pmp - ppl - 1)
+		player_parries += ' /' + ' -' * (pmp - ppl - 1)
 	else:
-		player_parries += " -" * (pmp - ppl)
+		player_parries += ' -' * (pmp - ppl)
 
 	if player.fighter.max_parries == 0:
-		player_parries += " UNSKILLED"
+		player_parries += ' UNSKILLED'
 
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
 	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, player_parries)
 
 	pmw = player.fighter.max_wounds
 	pwl = player.fighter.wounds 
-	player_wounds = "WOUNDS:" + " *" * pwl + " -" * (pmw - pwl)
+	player_wounds = 'WOUNDS:' + ' *' * pwl + ' -' * (pmw - pwl)
 	libtcod.console_set_default_foreground(panel, libtcod.light_red)
 	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, player_wounds)
 
@@ -1514,28 +1514,28 @@ def render_all():
 
 		tmp = target.fighter.max_parries
 		tpl = target.fighter.parries_left
-		target_parries = "PARRIES:" + " X" * tpl
+		target_parries = 'PARRIES:' + ' X' * tpl
 		if target.fighter.rested:
-			target_parries += " /" + " -" * (tmp - tpl - 1)
+			target_parries += ' /' + ' -' * (tmp - tpl - 1)
 		else:
-			target_parries += " -" * (tmp - tpl)
+			target_parries += ' -' * (tmp - tpl)
 		if target.fighter.max_parries == 0:
-			target_parries += " UNSKILLED"
+			target_parries += ' UNSKILLED'
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
 
 		tmw = target.fighter.max_wounds
 		twl = target.fighter.wounds
-		target_wounds = "WOUNDS:" + " *" * twl + " -" * (tmw - twl)
+		target_wounds = 'WOUNDS:' + ' *' * twl + ' -' * (tmw - twl)
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_red)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
 
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "TARGET: " + target.name.capitalize())
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'TARGET: ' + target.name.capitalize())
 	else:
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'No current target.')
 
 	libtcod.console_set_default_foreground(panel, libtcod.yellow)
 	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
@@ -1593,21 +1593,21 @@ def render_all_night():
 	# create the player info panel
 	pmp = player.fighter.max_parries
 	ppl = player.fighter.parries_left
-	player_parries = "PARRIES:" + " X" * ppl
+	player_parries = 'PARRIES:' + ' X' * ppl
 	if player.fighter.rested:
-		player_parries += " /" + " -" * (pmp - ppl - 1)
+		player_parries += ' /' + ' -' * (pmp - ppl - 1)
 	else:
-		player_parries += " -" * (pmp - ppl)
+		player_parries += ' -' * (pmp - ppl)
 
 	if player.fighter.max_parries == 0:
-		player_parries += " UNSKILLED"
+		player_parries += ' UNSKILLED'
 
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
 	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, player_parries)
 
 	pmw = player.fighter.max_wounds
 	pwl = player.fighter.wounds 
-	player_wounds = "WOUNDS:" + " *" * pwl + " -" * (pmw - pwl)
+	player_wounds = 'WOUNDS:' + ' *' * pwl + ' -' * (pmw - pwl)
 	libtcod.console_set_default_foreground(panel, libtcod.light_red)
 	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, player_wounds)
 
@@ -1616,28 +1616,28 @@ def render_all_night():
 
 		tmp = target.fighter.max_parries
 		tpl = target.fighter.parries_left
-		target_parries = "PARRIES:" + " X" * tpl
+		target_parries = 'PARRIES:' + ' X' * tpl
 		if target.fighter.rested:
-			target_parries += " /" + " -" * (tmp - tpl - 1)
+			target_parries += ' /' + ' -' * (tmp - tpl - 1)
 		else:
-			target_parries += " -" * (tmp - tpl)
+			target_parries += ' -' * (tmp - tpl)
 		if target.fighter.max_parries == 0:
-			target_parries += " UNSKILLED"
+			target_parries += ' UNSKILLED'
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
 
 		tmw = target.fighter.max_wounds
 		twl = target.fighter.wounds
-		target_wounds = "WOUNDS:" + " *" * twl + " -" * (tmw - twl)
+		target_wounds = 'WOUNDS:' + ' *' * twl + ' -' * (tmw - twl)
 
 		libtcod.console_set_default_foreground(panel, libtcod.light_red)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
 
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "TARGET: " + target.name.capitalize())
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'TARGET: ' + target.name.capitalize())
 	else:
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, "No current target.")
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'No current target.')
 
 	libtcod.console_set_default_foreground(panel, libtcod.yellow)
 	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
@@ -1810,14 +1810,14 @@ def single_screen(title, options):
 
 def escape_menu():
 	options = []
-	options.append(["Skills", "", 0],)
-	options.append(["Controls", "", 1])
+	options.append(['Skills', '', 0],)
+	options.append(['Controls', '', 1])
 	if game_state == 'playing':
-		options.append(["Save and Quit", "", 2])
+		options.append(['Save and Quit', '', 2])
 	elif game_state == 'dead':
-		options.append(["Quit", "", 3])
+		options.append(['Quit', '', 3])
 
-	choice = triple_menu("***PAUSED***", options)
+	choice = triple_menu('***PAUSED***', options)
 
 	if choice == 0:
 		skills_menu()
@@ -1833,20 +1833,20 @@ def skills_menu():
 		if skill > 0:
 			options.append( [num_to_faculty_name(inx, skill), num_to_faculty_description(inx, skill), inx] )
 	if len(options) == 0:
-		options.append( ["You have no skills currently.", "Eat minds to gain skills! Kill creatures to eat their minds.", 0])
-	triple_menu("SKILLS", options)
+		options.append( ['You have no skills currently.', 'Eat minds to gain skills! Kill creatures to eat their minds.', 0])
+	triple_menu('SKILLS', options)
 
 	return None
 
 def controls_screen():
 	options = []
 
-	options.append("Move - Arrow Keys")
-	options.append("Other Move - Num Pad")
-	options.append("Rest (Recover Parries) - Space")
-	options.append("Eat Minds - E")
-	options.append("Menu - Escape")
-	single_screen("CONTROLS", options)
+	options.append('Move - Arrow Keys')
+	options.append('Other Move - Num Pad')
+	options.append('Rest (Recover Parries) - Space')
+	options.append('Eat Minds - E')
+	options.append('Menu - Escape')
+	single_screen('CONTROLS', options)
 	return None
 
 def handle_keys():
@@ -1940,10 +1940,10 @@ def player_eat_mind():
 	# Now, choose mind from available_minds with a menu
 
 	if len(available_minds) == 0:
-		log("No minds here to be eaten!", libtcod.red)
+		log('No minds here to be eaten!', libtcod.red)
 		return 'no-turn'
 
-	eaten_mind = triple_menu("Which mind to consume?", available_minds)
+	eaten_mind = triple_menu('Which mind to consume?', available_minds)
 
 	# choose option to eat in that mind with a menu
 	
@@ -1962,62 +1962,62 @@ def player_eat_mind():
 		player_pause()
 		player_pause()
 
-	log("You devour the mind...", libtcod.red)
-	log("You know %s!" %num_to_faculty_name(choice, player.mind.skills[choice]), libtcod.blue)
+	log('You devour the mind...', libtcod.red)
+	log('You know %s!' %num_to_faculty_name(choice, player.mind.skills[choice]), libtcod.blue)
 
 	return 'took-turn'
 
 def num_to_faculty_name(ind, magnitude=1):
 	if ind == 0:
-		return "Mapping"
+		return 'Mapping'
 	if ind == 1:
-		return "Parry %i" % magnitude
+		return 'Parry %i' % magnitude
 	if ind == 2:
-		return "Weapon Use"
+		return 'Weapon Use'
 	if ind == 3:
-		return "Armor Use"
+		return 'Armor Use'
 	if ind == 4:
-		return "First Aid %i" % magnitude
+		return 'First Aid %i' % magnitude
 	if ind == 5:
-		return "Stealth %i" % magnitude
+		return 'Stealth %i' % magnitude
 	if ind == 6:
-		return "Searching %i" % magnitude
+		return 'Searching %i' % magnitude
 	if ind == 7:
-		return "Open Doors"
+		return 'Open Doors'
 	if ind == 8:
-		return "Running"
+		return 'Running'
 	if ind == 9:
-		return "Digging"
+		return 'Digging'
 	if ind == 10:
-		return "Swimming"
+		return 'Swimming'
 	if ind == 11:
-		return "Vaulting"
+		return 'Vaulting'
 
 def num_to_faculty_description(ind, magnitude=1):
 	if ind == 0:
-		return "With this, you can remember what terrain you've seen."
+		return 'With this, you can remember what terrain you\'ve seen.'
 	if ind == 1:
-		return "Each parry lets you block one more attack. Stand still to regain parries slowly."
+		return 'Each parry lets you block one more attack. Stand still to regain parries slowly.'
 	if ind == 2:
-		return "You can use weapons. Weapons are essential to proper parrying, and some do more damage than your limbs."
+		return 'You can use weapons. Weapons are essential to proper parrying, and some do more damage than your limbs.'
 	if ind == 3:
-		return "You can now wear armor, just like the filth you hunt. It reduces the damage from each landed blow."
+		return 'You can now wear armor, just like the filth you hunt. It reduces the damage from each landed blow.'
 	if ind == 4:
-		return "This much knowledge of first aid lets you regain a wound if you have %i or fewer left. Not for combat use!"
+		return 'This much knowledge of first aid lets you regain a wound if you have %i or fewer left. Not for combat use!'
 	if ind == 5:
-		return "You can duck down to hide behind or in low obstructions."
+		return 'You can duck down to hide behind or in low obstructions.'
 	if ind == 6:
-		return "You can see things that are hiding behind or in low obstructions."
+		return 'You can see things that are hiding behind or in low obstructions.'
 	if ind == 7:
-		return "You can open doors without making a racket."
+		return 'You can open doors without making a racket.'
 	if ind == 8:
-		return "You can run at the cost of your defenses. Press r to convert parries into extra spaces of movement."
+		return 'You can run at the cost of your defenses. Press r to convert parries into extra spaces of movement.'
 	if ind == 9:
-		return "You can go to where the bodies are buried..."
+		return 'You can go to where the bodies are buried...'
 	if ind == 10:
-		return "You can cross over deep water."
+		return 'You can cross over deep water.'
 	if ind == 11:
-		return "With a bound, you can now vault over low obstacles."
+		return 'With a bound, you can now vault over low obstacles.'
 
 def make_faculty_list(mapping=0, parry=0, weapon=0, armor=0, first_aid=0, stealth=0, 
 	search=0, doors=0, run=0, dig=0, swim=0, vault=0):
@@ -2033,18 +2033,18 @@ def mindeating_menu(eaten_mind):
 			options.append( [num_to_faculty_name(i, player.mind.skills[i] + 1), num_to_faculty_description(i, player.mind.skills[i] + 1), i] )
 
 	if len(options) == 0:
-		eaten_mind.owner.name += ", mindless"
+		eaten_mind.owner.name += ', mindless'
 		eaten_mind.owner.mind = None
 		log('This mind had nothing new in it! Disgusting!', libtcod.red)
 		return -1
 
-	choice = triple_menu("MMM! What to gain from this mind?", options)
+	choice = triple_menu('MMM! What to gain from this mind?', options)
 
 	if choice == 'no-choice':
 		log('You resist the urge to eat this mind...', libtcod.blue)
 		return -1
 
-	eaten_mind.owner.name += ", mindless"
+	eaten_mind.owner.name += ', mindless'
 	eaten_mind.owner.mind = None
 
 	return choice
