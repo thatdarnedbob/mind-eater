@@ -1854,6 +1854,7 @@ def escape_menu():
 		options.append(['Save and Quit', '', 2])
 	elif game_state == 'dead':
 		options.append(['Quit', '', 3])
+	options.append(['Main Menu', '', 4])
 
 	choice = triple_menu('***PAUSED***', options)
 
@@ -1863,6 +1864,8 @@ def escape_menu():
 		controls_screen()
 	elif choice == 2 or choice == 3:
 		return 'exit'
+	elif choice == 4:
+		main_menu()
 
 def skills_menu():
 	options = []
