@@ -345,9 +345,8 @@ class Object:
 			libtcod.console_set_char(board, self.x, self.y, ' ')
 
 	def get_equipped_in_slot(self, slot):
-		equipped = None
 		for thing in self.inventory:
-			if thing.item.slot == slot:
+			if thing.item.slot == slot and thing.item.equipped:
 				return thing.item
 
 	def start_with(self, an_item):
@@ -372,6 +371,8 @@ class Fighter:
 		self.xp = xp
 		self.death_function = death_function
 
+		self.runs = 0
+
 	@property
 	def power(self): # return the actual power by summing up the power bonus from all buffs
 		bonus = sum(buff.power_bonus for buff in get_all_buffs(self.owner))
@@ -388,6 +389,11 @@ class Fighter:
 		return self.base_max_parries + bonus
 
 	@property
+	def max_runs(self):
+		bonus = sum(buff.max_runs_bonus for buff in get_all_buffs(self.owner))
+		return self.max_parries + bonus
+
+	@property
 	def max_wounds(self): # return the actual max_wounds by summing up the max_wounds bonus from all buffs
 		bonus = sum(buff.max_wounds_bonus for buff in get_all_buffs(self.owner))
 		return self.base_max_wounds + bonus
@@ -396,7 +402,7 @@ class Fighter:
 		target.fighter.take_damage(self.power)
 
 	def take_damage(self, damage):
-		if self.parries_left >= 1:
+		if self.parries_left >= 1 and self.owner.get_equipped_in_slot('weapon') is not None:
 			self.parries_left -= 1
 			log(self.owner.name.capitalize() + ' parries the blow!')
 		else:
@@ -404,6 +410,10 @@ class Fighter:
 			self.wounds -= net_damage
 			if net_damage == 0:
 				log('The blow was absorbed by ' + self.owner.name + '\'s armor!')
+			elif self.owner.name == 'door' and player.mind.skills[7] == 1:
+				log('You creep through the door, turning the handle slowly...', libtcod.yellow)
+			elif self.owner.name == 'gate' and player.mind.skills[7] == 1:
+				log('You creep through the gate, unlatching it carefully...', libtcod.yellow)
 			else:
 				log('The blow lands solidly on ' + self.owner.name + '!')
 			if self.wounds <= 0:
@@ -420,12 +430,23 @@ class Fighter:
 		elif self.parries_left < self.max_parries:
 			self.rested = True
 
+	def first_aid(self):
+		skill_level = self.owner.mind.skills[4]
+		if skill_level >= self.wounds and self.max_wounds > self.wounds:
+			self.wounds += 1
+
+	def run_prep(self):
+		if self.runs < self.max_runs and self.parries_left > 0:
+			self.parries_left -= 1
+			self.runs += 1
+			return 'run-prep'
+
 def player_fighter():
 	return Fighter(wounds=3, defense=0, power=1, armor=0, xp=0, death_function=player_death)
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(mapping=0, parry=0))
+	return Mind(make_faculty_list(parry=1, weapon=1, armor=1, run=1))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -514,18 +535,38 @@ def monster_death(monster):
 
 def door_open_death(monster):
 	global objects
-	log('You shatter the door with a mighty crash!', libtcod.yellow)
-	monster.fighter = None
-	objects.remove(monster)
-	cur_map[monster.x][monster.y].change_type('wood floor')
-	initialize_fov()
+
+	if player.mind.skills[7] == 0:
+
+		log('You shatter the door with a mighty crash!', libtcod.yellow)
+		monster.fighter = None
+		objects.remove(monster)
+		cur_map[monster.x][monster.y].change_type('wood floor')
+		initialize_fov()
+
+	else:
+
+		player.x = monster.x
+		player.y = monster.y
+
+		monster.fighter.wounds = 1
+		initialize_fov()
 
 def gate_open_death(monster):
 	global objects
-	log('You smash through the gate with a mighty crash!', libtcod.yellow)
-	monster.fighter = None
-	objects.remove(monster)
-	cur_map[monster.x][monster.y].change_type('grass')
+
+	if player.mind.skills[7] == 0:
+		log('You smash through the gate with a mighty crash!', libtcod.yellow)
+		monster.fighter = None
+		objects.remove(monster)
+		cur_map[monster.x][monster.y].change_type('grass')
+	else:
+
+		player.x = monster.x
+		player.y = monster.y
+
+		monster.fighter.wounds = 1
+		initialize_fov()
 
 def get_all_buffs(buffed):
 	# implement buffs later
@@ -541,11 +582,12 @@ def get_all_buffs(buffed):
 	return buff_list
 
 class Buff:
-	def __init__(self, power_bonus=0, armor_bonus=0, max_wounds_bonus=0, max_parries_bonus=0):
+	def __init__(self, power_bonus=0, armor_bonus=0, max_wounds_bonus=0, max_parries_bonus=0, max_runs_bonus=0):
 		self.power_bonus = power_bonus
 		self.armor_bonus = armor_bonus
 		self.max_wounds_bonus = max_wounds_bonus
 		self.max_parries_bonus = max_parries_bonus
+		self.max_runs_bonus = max_runs_bonus
 
 class Mind:
 	def __init__(self, skills):
@@ -598,13 +640,15 @@ class Item():
 	# or equip the item. So each item has something that happens when it is used,
 	# and a slot to be equipped in, and various bonuses, and descriptions.
 	
-	def __init__(self, use_function=None, equippable=False, slot=None, power_bonus=0, armor_bonus=0, max_parries_bonus=0, max_wounds_bonus=0):
+	def __init__(self, use_function=None, equippable=False, slot=None, power_bonus=0, armor_bonus=0,
+		max_parries_bonus=0, max_runs_bonus=0, max_wounds_bonus=0):
 		self.use_function = use_function
 		self.equippable = equippable
 		self.slot = slot
 		self.power_bonus = power_bonus
 		self.armor_bonus = armor_bonus
 		self.max_parries_bonus = max_parries_bonus
+		self.max_runs_bonus = max_runs_bonus
 		self.max_wounds_bonus = max_wounds_bonus
 		self.equipped = False
 
@@ -658,7 +702,17 @@ class Item():
 		old_shiz = user.get_equipped_in_slot(self.slot)
 		if old_shiz is not None:
 			old_shiz.unequip(user)
-		self.equipped = True
+
+		if user.mind.skills[2] == 0 and self.slot == 'weapon':
+			if user is player:
+				log('Need to learn how to use weapons first!')
+			return
+		elif user.mind.skills[3] == 0 and self.slot == 'armor':
+			if user is player:
+				log('Need to learn how to use armor first!')
+			return
+		else:
+			self.equipped = True
 
 		if user is player:
 			log('Equipped a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_green)
@@ -697,6 +751,10 @@ def leather_armor(xpos, ypos):
 def shield(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='offhand', max_parries_bonus=2)
 	return Object(xpos, ypos, ']', 'shield', libtcod.blue, walkable=True, always_visible=True, item=item_comp)
+
+def running_shoes(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='feet', max_runs_bonus=1)
+	return Object(xpos, ypos, '"', 'running shoes', libtcod.yellow, walkable=True, always_visible=True, item=item_comp)
 
 class Tile:
 	# will build grass by default
@@ -1474,6 +1532,47 @@ def log(new_log, color = libtcod.white):
 		# add the new line as a tuple of text and color.
 		game_log.append( (line, color) )
 
+def parries_info(obj):
+	if obj.fighter is None:
+		return ''
+
+	if obj.get_equipped_in_slot('weapon') is None:
+		return "NO WEAPON"
+
+	max_p = obj.fighter.max_parries
+	rem_p = obj.fighter.parries_left
+
+	parries = 'PARRIES: '
+
+	if max_p == 0:
+		return parries + 'UNSKILLED'
+
+	parries += ' X' * rem_p
+	if obj.fighter.rested:
+		parries += ' /' + ' -' * (max_p - rem_p - 1)
+	else:
+		parries += ' -' * (max_p - rem_p)
+
+	return parries
+
+def wounds_info(obj):
+	if obj.fighter is None:
+		return ''
+
+	max_w = obj.fighter.max_wounds
+	rem_w = obj.fighter.wounds
+	wound = 'WOUNDS:' + ' *' * rem_w + ' -' * (max_w -rem_w)
+
+	return wound
+
+def runs_info(obj):
+	if obj.fighter is None or obj.mind is None:
+		return ''
+	if obj.mind.skills[8] == 0:
+		return ''
+	run = 'RUNS: %i/%i' % (obj.fighter.runs, obj.fighter.max_runs)
+	return run
+
 def render_all():
 	global fov_map
 	global fov_recompute
@@ -1516,51 +1615,24 @@ def render_all():
 	libtcod.console_clear(panel)
 
 	# create the player info panel
-	pmp = player.fighter.max_parries
-	ppl = player.fighter.parries_left
-	player_parries = 'PARRIES:' + ' X' * ppl
-	if player.fighter.rested:
-		player_parries += ' /' + ' -' * (pmp - ppl - 1)
-	else:
-		player_parries += ' -' * (pmp - ppl)
-
-	if player.fighter.max_parries == 0:
-		player_parries += ' UNSKILLED'
 
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, player_parries)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, parries_info(player))
 
-	pmw = player.fighter.max_wounds
-	pwl = player.fighter.wounds 
-	player_wounds = 'WOUNDS:' + ' *' * pwl + ' -' * (pmw - pwl)
 	libtcod.console_set_default_foreground(panel, libtcod.light_red)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, player_wounds)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, wounds_info(player))
 
 	# create the enemy info panel
 	if target is not None and target.fighter is not None:
 
-		tmp = target.fighter.max_parries
-		tpl = target.fighter.parries_left
-		target_parries = 'PARRIES:' + ' X' * tpl
-		if target.fighter.rested:
-			target_parries += ' /' + ' -' * (tmp - tpl - 1)
-		else:
-			target_parries += ' -' * (tmp - tpl)
-		if target.fighter.max_parries == 0:
-			target_parries += ' UNSKILLED'
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
-
-		tmw = target.fighter.max_wounds
-		twl = target.fighter.wounds
-		target_wounds = 'WOUNDS:' + ' *' * twl + ' -' * (tmw - twl)
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_red)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
-
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'TARGET: ' + target.name.capitalize())
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, parries_info(target))
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_red)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, wounds_info(target))
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'No current target.')
 
@@ -1618,57 +1690,33 @@ def render_all_night():
 	libtcod.console_clear(panel)
 
 	# create the player info panel
-	pmp = player.fighter.max_parries
-	ppl = player.fighter.parries_left
-	player_parries = 'PARRIES:' + ' X' * ppl
-	if player.fighter.rested:
-		player_parries += ' /' + ' -' * (pmp - ppl - 1)
-	else:
-		player_parries += ' -' * (pmp - ppl)
-
-	if player.fighter.max_parries == 0:
-		player_parries += ' UNSKILLED'
 
 	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, player_parries)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, parries_info(player))
 
-	pmw = player.fighter.max_wounds
-	pwl = player.fighter.wounds 
-	player_wounds = 'WOUNDS:' + ' *' * pwl + ' -' * (pmw - pwl)
 	libtcod.console_set_default_foreground(panel, libtcod.light_red)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, player_wounds)
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, wounds_info(player))
 
 	# create the enemy info panel
 	if target is not None and target.fighter is not None:
 
-		tmp = target.fighter.max_parries
-		tpl = target.fighter.parries_left
-		target_parries = 'PARRIES:' + ' X' * tpl
-		if target.fighter.rested:
-			target_parries += ' /' + ' -' * (tmp - tpl - 1)
-		else:
-			target_parries += ' -' * (tmp - tpl)
-		if target.fighter.max_parries == 0:
-			target_parries += ' UNSKILLED'
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, target_parries)
-
-		tmw = target.fighter.max_wounds
-		twl = target.fighter.wounds
-		target_wounds = 'WOUNDS:' + ' *' * twl + ' -' * (tmw - twl)
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_red)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, target_wounds)
-
 		libtcod.console_set_default_foreground(panel, libtcod.yellow)
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'TARGET: ' + target.name.capitalize())
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, parries_info(target))
+
+		libtcod.console_set_default_foreground(panel, libtcod.light_red)
+		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, wounds_info(target))
+
 	else:
 		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'No current target.')
 
 	libtcod.console_set_default_foreground(panel, libtcod.yellow)
-	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
-	
+	libtcod.console_print_ex(panel, PANEL_WIDTH-1, 0, libtcod.BKGND_DEFAULT, libtcod.RIGHT, get_names_under_mouse())
+
+	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y - 1, runs_info(player))
+
 	# create the log panel
 	y = 0
 	for (line, color) in game_log[-1*LOG_HEIGHT:]:
@@ -1872,6 +1920,7 @@ def controls_screen():
 	options.append('Other Move - Num Pad')
 	options.append('Rest (Recover Parries) - Space')
 	options.append('Eat Minds - E')
+	options.append('First Aid - F')
 	options.append('Menu - Escape')
 	single_screen('CONTROLS', options)
 	return None
@@ -1922,9 +1971,12 @@ def handle_keys():
 					print(thing.name)
 					print(thing.item.equipped)
 				return 'no-turn'
+		elif key_char == 'f':
+			return player.fighter.first_aid()
+		elif key_char == 'r' and player.mind.skills[8] > 0:
+			return player.fighter.run_prep()
 		elif key_char == 'd':
 			for thing in player.inventory:
-				print(thing.name)
 				thing.item.drop(player)
 		elif key_char == 'w':
 			for thing in player.inventory:
@@ -1951,6 +2003,9 @@ def player_move_or_attack(dx, dy):
 		return 'took-turn'
 	elif player.move(dx, dy):
 		fov_recompute = True
+		if player.fighter.runs > 0:
+			player.fighter.runs -= 1
+			return 'ran'
 		return 'took-turn'
 	else:
 		return 'no-turn'
