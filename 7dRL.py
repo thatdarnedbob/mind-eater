@@ -142,9 +142,9 @@ def new_game():
  
 	game_state = 'playing'
 
-	player.inventory.append(sword(0, 0))
-	player.inventory.append(shield(0, 0))
-	player.inventory.append(leather_armor(0, 0))
+	player.start_with(sword(0, 0))
+	player.start_with(shield(0, 0))
+	player.start_with(leather_armor(0, 0))
 
 
 
@@ -161,11 +161,14 @@ def save_game():
 	#file['stairs_index'] = objects.index(stairs)
 	file['game_state'] = game_state
 	file['game_log'] = game_log
+	file['curr_map_width'] = curr_map_width
+	file['curr_map_height'] = curr_map_height
+	file['target'] = target
 
 	file.close()
 
 def load_game():
-	global cur_map, objects, player, game_state, game_log
+	global cur_map, objects, player, game_state, game_log, board, curr_map_width, curr_map_height, target
 	# stairs
 	# set state
 
@@ -180,6 +183,12 @@ def load_game():
 	#stairs = objects[file['stairs_index']]
 	game_state = file['game_state']
 	game_log = file['game_log']
+
+	curr_map_width = file['curr_map_width']
+	curr_map_height = file['curr_map_height']
+	board = libtcod.console_new(curr_map_width, curr_map_height)
+
+	target = file['target']
 
 	file.close()
 
@@ -422,7 +431,9 @@ def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, first_aid=1, doors=1, dig=1))
-	return Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster =  Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(peasant_tool(x, y))
+	return monster
 
 def lumber_worker(x, y):
 	fighter_comp = Fighter(wounds = 2, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -436,7 +447,9 @@ def hunter(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1))
-	return Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(spear(x, y))
+	return monster
 
 def fisherman(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -448,7 +461,11 @@ def guard(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, armor=1, doors=1, run=1))
-	return Object(x, y, 'G', 'guard', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'G', 'guard', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(sword(x, y))
+	monster.start_with(shield(x, y))
+	monster.start_with(axe(x, y))
+	return monster
 
 def cow(x, y):
 	fighter_comp = Fighter(wounds = 6, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -614,6 +631,7 @@ class Item():
 		self.owner.y = dropper.y
 		if dropper is player:
 			log('You dropped a ' + self.owner.name + '.', libtcod.yellow)
+		self.owner.send_to_back()
 
 	def use(self, user):
 		if self.use_function is None:
@@ -660,8 +678,17 @@ def sword(xpos, ypos):
 	return Object(xpos, ypos, '/', 'sword', libtcod.light_gray, walkable=True, always_visible=True, item=item_comp)
 
 def axe(xpos, ypos):
-	item_comp = Item(use_function=no_use, equippable=True, slot='weaopn', power_bonus=2)
+	item_comp = Item(use_function=no_use, equippable=True, slot='weaopn', power_bonus=2, max_parries_bonus=-1)
 	return Object(xpos, ypos, 'P', 'axe', libtcod.light_green, walkable=True, always_visible=True, item=item_comp)
+
+def spear(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='weapon', max_parries_bonus=1)
+	return Object(xpos, ypos, '|', 'spear', libtcod.purple, walkable=True, always_visible=True, item=item_comp)
+
+def peasant_tool(xpos, ypos):
+	tool_names = ['scythe', 'shovel', 'sickle', 'hatchet', 'hammer', 'rake']
+	item_comp = Item(use_function=no_use, equippable=True, slot='weapon')
+	return Object(xpos, ypos, 'x', random.choice(tool_names), libtcod.fuchsia, walkable=True, always_visible=True, item=item_comp)
 
 def leather_armor(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='armor', armor_bonus=1)
@@ -1571,13 +1598,13 @@ def render_all_night():
 
 				if visible:
 					tile = cur_map[map_x][map_y]
-					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, libtcod.black)
+					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, libtcod.darkest_blue)
 					if player.mind.skills[0]:
 						cur_map[map_x][map_y].explored = True
 				elif cur_map[map_x][map_y].explored:
 					# explored tile logic
 					tile = cur_map[map_x][map_y]
-					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore * 0.5, libtcod.black)
+					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore * 0.5, libtcod.darkest_blue)
 
 
 	for obj in objects:
@@ -1745,7 +1772,7 @@ def triple_menu(title, options):
 			selected += 1
 		elif (key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8) and selected > 0:
 			selected -= 1
-		elif key.vk == libtcod.KEY_ENTER:
+		elif key.vk == libtcod.KEY_ENTER or key.vk == libtcod.KEY_SPACE or key.vk == libtcod.KEY_KPENTER:
 
 			libtcod.console_clear(menu)
 			libtcod.console_blit(menu, 0, 0, MENU_WIDTH, height, 0, x, y, 1.0, 1.0)
@@ -1897,6 +1924,7 @@ def handle_keys():
 				return 'no-turn'
 		elif key_char == 'd':
 			for thing in player.inventory:
+				print(thing.name)
 				thing.item.drop(player)
 		elif key_char == 'w':
 			for thing in player.inventory:
