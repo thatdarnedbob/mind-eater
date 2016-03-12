@@ -278,6 +278,14 @@ class Object:
 			self.x = new_x
 			self.y = new_y
 			return True
+		elif cur_map[new_x][new_y].type == 'water' and self.mind is not None and self.mind.skills[10] > 0:
+			self.x = new_x
+			self.y = new_y
+			return True
+		elif cur_map[new_x][new_y].transparent and is_walkable(new_x+dx, new_y+dy) and self.mind is not None and self.mind.skills[11] > 0:
+			self.x = new_x + dx
+			self.y = new_y + dy
+			return True
 		else:
 			return False
 
@@ -506,6 +514,34 @@ def dog(x, y):
 	mind_comp = Mind(make_faculty_list(mapping=1, stealth=1, search=2, run=1, dig=1, swim=1, vault=1))
 	return Object(x, y, 'd', 'dog', libtcod.light_sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 
+def great_corpse(x, y):
+	corpse_type = ''
+	mind_comp = None
+	if chance(1,2):
+		corpse_type = 'great warrior'
+		mind_comp = Mind(make_faculty_list(mapping=1, parry=4, weapon=1, armor=1, first_aid=3))
+	else:
+		corpse_type = 'great thief'
+		mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, stealth=4, search=4, vault=1))
+	return Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+
+def fine_corpse(x, y):
+	corpse_type = ''
+	mind_comp = None
+	if chance(1,4):
+		corpse_type = 'warrior'
+		mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, armor=1, first_aid=1))
+	elif chance(1,3):
+		corpse_type = 'thief'
+		mind_comp = Mind(make_faculty_list(mapping=1, stealth=2, search=2, vault=1))
+	elif chance(1,2):
+		corpse_type = 'healer'
+		mind_comp = Mind(make_faculty_list(mapping=1, first_aid=2, run=1))
+	else:
+		corpse_type = 'athlete'
+		mind_comp = Mind(make_faculty_list(run=3, swim=1, vault=1))
+	return Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+
 def door(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, armor=0, xp = 0, death_function=door_open_death)
 	return Object(x, y, 150, 'door', libtcod.sepia, walkable=True, always_visible=True, fighter=fighter_comp)
@@ -574,6 +610,9 @@ def get_all_buffs(buffed):
 
 	if buffed.mind is not None:
 		buff_list.append(Buff(max_parries_bonus=buffed.mind.skills[1]))
+
+	if buffed.mind is not None:
+		buff_list.append(Buff(max_runs_bonus=buffed.mind.skills[8]))
 
 	for thing in buffed.inventory:
 		if thing.item is not None and thing.item.equipped:
@@ -806,6 +845,10 @@ def terrain_tile(terrain):
 		return (True, True, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
 	if terrain == 'gravestone':
 		return (False, True, True, libtcod.green, libtcod.gray, 149)
+	if terrain == 'fresh grave':
+		return (True, True, False, libtcod.dark_green, libtcod.sepia, 'o')
+	if terrain == 'old grave':
+		return (True, True, False, libtcod.dark_green, libtcod.dark_green, 'o')
 
 def initialize_ascii_maps():
 	# we set the integers from 128 on up to be special graphics in our font file
@@ -1240,7 +1283,10 @@ def place_graves(xpos, ypos, tile_size):
 			for x in range(wall_start_x+1, wall_start_x + wall_w - 1):
 				if chance(2,7):
 					cur_map[x][y].change_type('gravestone')
-					cur_map[x][y+1].change_type('mud')
+					if chance(1,15):
+						cur_map[x][y+1].change_type('fresh grave')
+					else:
+						cur_map[x][y+1].change_type('old grave')
 
 def place_pens(xpos, ypos, tile_size):
 	global cur_map, objects
@@ -1975,9 +2021,10 @@ def handle_keys():
 			return player.fighter.first_aid()
 		elif key_char == 'r' and player.mind.skills[8] > 0:
 			return player.fighter.run_prep()
-		elif key_char == 'd':
-			for thing in player.inventory:
-				thing.item.drop(player)
+		elif key_char == 'd' and player.mind.skills[9] > 0:
+			return player_dig(player.x, player.y)
+			#for thing in player.inventory:
+			#	thing.item.drop(player)
 		elif key_char == 'w':
 			for thing in player.inventory:
 				thing.item.toggle_equip(player)
@@ -1992,10 +2039,17 @@ def player_move_or_attack(dx, dy):
 
 	# try to find a target to attack
 	targeted = None
+	targeted_door = None
 	for obj in objects:
 		if obj.fighter and x is obj.x and y is obj.y:
-			targeted = obj
-			break
+			if obj.name == 'door' or obj.name == 'gate':
+				targeted_door = obj
+			else:
+				targeted = obj
+				break
+
+	if targeted is None and targeted_door is not None:
+		targeted = targeted_door
 
 	if targeted is not None:
 		player.fighter.attack(targeted)
@@ -2009,6 +2063,22 @@ def player_move_or_attack(dx, dy):
 		return 'took-turn'
 	else:
 		return 'no-turn'
+
+def player_dig(x, y):
+	if cur_map[x][y].type != 'fresh grave':
+		print(cur_map[x][y].type)
+		log("You dig half-heartedly, but you know there's nothing here...", libtcod.red)
+		return 'took-turn'
+	elif chance(1,5):
+		corpse = great_corpse(x, y)
+		objects.append(corpse)
+		corpse.send_to_back()
+		log("You dig eagerly, and unearth a great treasure!", libtcod.green)
+	else:
+		corpse = fine_corpse(x, y)
+		objects.append(corpse)
+		corpse.send_to_back()
+		log("You dig hungrily, and unearth a treasure!", libtcod.green)
 
 def player_pause():
 	player.fighter.rest()
@@ -2162,7 +2232,7 @@ def random_choice(options):
 # libtcod.console_set_custom_font('arial12x12.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_set_custom_font('terminal12x12.png', libtcod.FONT_LAYOUT_ASCII_INROW)
 
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'BLANK GAME')
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'THE MIND EATER')
 
 libtcod.sys_set_fps(LIMIT_FPS)
 libtcod.console_set_keyboard_repeat(200, 1000/LIMIT_FPS)
