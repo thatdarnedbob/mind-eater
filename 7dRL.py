@@ -120,15 +120,14 @@ def main_menu():
 
 	exit(0)
 
-
 def new_game():
-	global player, game_state, game_log, target
+	global player, game_state, game_log, target, lookback, objects
 
 	if os.path.isfile('savegame'):
 		os.remove('savegame')
 
 	# create player
-	player = Object(0, 0, '@', 'the Mind Eater', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter(), mind=player_mind())
+	player = Object(0, 0, '@', 'the Mind Eater', libtcod.white, walkable=False, always_visible=True, fighter=player_fighter(), mind=player_mind())
 	target = None
 
 	make_village_map()
@@ -139,12 +138,16 @@ def new_game():
 	log('YOU ARE THE MIND EATER', libtcod.red)
  
 	game_state = 'playing'
+	lookback = 0
 
-	player.start_with(sword(0, 0))
-	player.start_with(shield(0, 0))
-	player.start_with(leather_armor(0, 0))
+	#player.start_with(sword(0, 0))
+	#player.start_with(shield(0, 0))
+	#player.start_with(leather_armor(0, 0))
+	#player.start_with(axe(0, 0))
 
-
+	for obj in objects:
+		if obj.fighter is not None:
+			obj.fighter.parries_left = obj.fighter.max_parries
 
 # With shelve, saving and loading couldn't be easier!
 
@@ -166,7 +169,7 @@ def save_game():
 	file.close()
 
 def load_game():
-	global cur_map, objects, player, game_state, game_log, board, curr_map_width, curr_map_height, target
+	global cur_map, objects, player, game_state, game_log, board, curr_map_width, curr_map_height, target, lookback
 	# stairs
 	# set state
 
@@ -193,6 +196,8 @@ def load_game():
 	os.remove('savegame')
 
 	initialize_fov()
+
+	lookback = 0
 
 def play_game():
 	global camera_x, camera_y, key, mouse
@@ -423,6 +428,7 @@ class Fighter:
 			else:
 				log('The blow lands solidly on ' + self.owner.name + '!')
 			if self.wounds <= 0:
+				self.wounds = 0
 				function = self.death_function
 				if function is not None:
 					function(self.owner)
@@ -452,12 +458,12 @@ def player_fighter():
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(parry=1, weapon=1, armor=1, run=1))
+	return Mind(make_faculty_list(weapon=1, armor=1))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
-	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, first_aid=1, doors=1, dig=1))
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, first_aid=1, doors=1, dig=1))
 	monster =  Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(peasant_tool(x, y))
 	return monster
@@ -491,7 +497,7 @@ def guard(x, y):
 	monster = Object(x, y, 'G', 'guard', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(sword(x, y))
 	monster.start_with(shield(x, y))
-	monster.start_with(axe(x, y))
+	monster.start_with(leather_armor(x, y))
 	return monster
 
 def cow(x, y):
@@ -567,6 +573,17 @@ def monster_death(monster):
 	monster.name = 'remains of a ' + monster.name
 	monster.send_to_back()
 
+	# loot splosion!
+
+	while len(monster.inventory) > 0:
+		xs = roll(-1, 1)
+		ys = roll(-1, 1)
+		if is_walkable(xs + monster.x, ys + monster.y):
+			thing = monster.inventory[0]
+			thing.item.drop(monster)
+			thing.x = xs + monster.x
+			thing.y = ys + monster.y
+					
 def door_open_death(monster):
 	global objects
 
@@ -751,6 +768,9 @@ class Item():
 		else:
 			self.equipped = True
 
+		if user.fighter is not None:
+			user.fighter.parries_left = min(user.fighter.parries_left, user.fighter.max_parries)
+
 		if user is player:
 			log('Equipped a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_green)
 
@@ -760,6 +780,8 @@ class Item():
 		self.equipped = False
 		if user is player:
 			log('Stopped equipping a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_red)
+		if user.fighter is not None:
+			user.fighter.parries_left = min(user.fighter.parries_left, user.fighter.max_parries)
 
 def no_use():
 	log('This thing isn\'t actually usable.')
@@ -769,7 +791,7 @@ def sword(xpos, ypos):
 	return Object(xpos, ypos, '/', 'sword', libtcod.light_gray, walkable=True, always_visible=True, item=item_comp)
 
 def axe(xpos, ypos):
-	item_comp = Item(use_function=no_use, equippable=True, slot='weaopn', power_bonus=2, max_parries_bonus=-1)
+	item_comp = Item(use_function=no_use, equippable=True, slot='weapon', power_bonus=2, max_parries_bonus=-1)
 	return Object(xpos, ypos, 'P', 'axe', libtcod.light_green, walkable=True, always_visible=True, item=item_comp)
 
 def spear(xpos, ypos):
@@ -1587,81 +1609,6 @@ def runs_info(obj):
 	run = 'RUNS: %i/%i' % (obj.fighter.runs, obj.fighter.max_runs)
 	return run
 
-def render_all():
-	global fov_map
-	global fov_recompute
-	global camera_x, camera_y
-
-	move_camera(player.x, player.y)
-
-	if fov_recompute:
-
-		fov_recompute = False
-		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, True, FOV_ALGO)
-		libtcod.console_clear(board)
-
-		for y in range(CAMERA_HEIGHT):
-			for x in range(CAMERA_WIDTH):
-				(map_x, map_y) = (camera_x + x, camera_y + y)
-				visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
-
-				wall = not cur_map[map_x][map_y].transparent
-
-				if visible:
-					tile = cur_map[map_x][map_y]
-					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore, tile.back)
-					if player.mind.skills[0]:
-						cur_map[map_x][map_y].explored = True
-				elif cur_map[map_x][map_y].explored:
-					# explored tile logic
-					tile = cur_map[map_x][map_y]
-					libtcod.console_put_char_ex(board, map_x, map_y, tile.char, tile.fore * 0.5, tile.back *0.5)
-
-
-	for obj in objects:
-		if obj is not player:
-			obj.draw()
-
-	player.draw()
-
-	libtcod.console_blit(board, camera_x, camera_y, curr_map_width, curr_map_height, 0, 0, 0)
-
-	libtcod.console_clear(panel)
-
-	# create the player info panel
-
-	libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y, parries_info(player))
-
-	libtcod.console_set_default_foreground(panel, libtcod.light_red)
-	libtcod.console_print(panel, PLAYER_INFO_X, PLAYER_INFO_Y + 1, wounds_info(player))
-
-	# create the enemy info panel
-	if target is not None and target.fighter is not None:
-
-		libtcod.console_set_default_foreground(panel, libtcod.yellow)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'TARGET: ' + target.name.capitalize())
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_gray)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 1, parries_info(target))
-
-		libtcod.console_set_default_foreground(panel, libtcod.light_red)
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y + 2, wounds_info(target))
-	else:
-		libtcod.console_print(panel, ENEMY_INFO_X, ENEMY_INFO_Y, 'No current target.')
-
-	libtcod.console_set_default_foreground(panel, libtcod.yellow)
-	libtcod.console_print_ex(panel, PANEL_WIDTH / 2, 0, libtcod.BKGND_DEFAULT, libtcod.CENTER, get_names_under_mouse())
-
-	# create the log panel
-	y = 0
-	for (line, color) in game_log[-1*LOG_HEIGHT:]:
-		libtcod.console_set_default_foreground(panel, color)
-		libtcod.console_print(panel, LOG_X, LOG_Y + y, line)
-		y += 1
-
-	libtcod.console_blit(panel, 0, 0, PANEL_WIDTH, PANEL_HEIGHT, 0, PANEL_X, PANEL_Y)
-
 def render_all_night():
 	global fov_map
 	global fov_recompute
@@ -1733,10 +1680,12 @@ def render_all_night():
 
 	# create the log panel
 	y = 0
-	for (line, color) in game_log[-1*LOG_HEIGHT:]:
+	for (line, color) in game_log[-1*LOG_HEIGHT-lookback:]:
 		libtcod.console_set_default_foreground(panel, color)
 		libtcod.console_print(panel, LOG_X, LOG_Y + y, line)
 		y += 1
+		if y == 6:
+			break
 
 	libtcod.console_blit(panel, 0, 0, PANEL_WIDTH, PANEL_HEIGHT, 0, PANEL_X, PANEL_Y)
 
@@ -1940,7 +1889,7 @@ def controls_screen():
 	return None
 
 def handle_keys():
-	global key
+	global key, lookback
 
 	if key.vk == libtcod.KEY_ESCAPE:
 		return escape_menu()
@@ -1965,7 +1914,7 @@ def handle_keys():
 		elif key.vk == libtcod.KEY_KP5 or key.vk == libtcod.KEY_SPACE:
 			return player_pause()
 
-		key_char = chr(key.c).lower()
+		key_char = chr(key.c)
 
 		if key_char == 'e':
 			return player_eat_mind()
@@ -1978,24 +1927,23 @@ def handle_keys():
 			for thing in player.inventory:
 				print(thing.name)
 				print(thing.item.equipped)
-			for obj in objects:
-				inv = obj.inventory
-				print(obj.name)
-				for thing in inv:
-					print(thing.name)
-					print(thing.item.equipped)
-				return 'no-turn'
+			return 'no-turn'
 		elif key_char == 'f':
 			return player.fighter.first_aid()
 		elif key_char == 'r' and player.mind.skills[8] > 0:
 			return player.fighter.run_prep()
 		elif key_char == 'd' and player.mind.skills[9] > 0:
 			return player_dig(player.x, player.y)
-			#for thing in player.inventory:
-			#	thing.item.drop(player)
+		elif key_char == 'D':
+			while len(player.inventory) > 0:
+				player.inventory[0].item.drop(player)
 		elif key_char == 'w':
 			for thing in player.inventory:
 				thing.item.toggle_equip(player)
+		elif key_char == '[':
+			lookback += 5
+		elif key_char == ']':
+			lookback = max(0, lookback - 5)
 
 	return 'no-turn'
 
@@ -2034,7 +1982,6 @@ def player_move_or_attack(dx, dy):
 
 def player_dig(x, y):
 	if cur_map[x][y].type != 'fresh grave':
-		print(cur_map[x][y].type)
 		log("You dig half-heartedly, but you know there's nothing here...", libtcod.red)
 		return 'took-turn'
 	elif chance(1,5):
