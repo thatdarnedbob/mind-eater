@@ -130,7 +130,6 @@ def new_game():
 		os.remove('savegame')
 
 	# create player
-
 	player = Object(0, 0, '@', 'the Mind Eater', libtcod.white, walkable=True, always_visible=True, fighter=player_fighter(), mind=player_mind())
 	target = None
 
@@ -142,6 +141,11 @@ def new_game():
 	log("YOU ARE THE MIND EATER", libtcod.red)
  
 	game_state = 'playing'
+
+	player.inventory.append(sword(0, 0))
+	player.inventory.append(shield(0, 0))
+	player.inventory.append(leather_armor(0, 0))
+
 
 
 # With shelve, saving and loading couldn't be easier!
@@ -223,7 +227,7 @@ def play_game():
 class Object:
 
 	def __init__(self, x, y, char, name, color, walkable=True, always_visible=False,
-		fighter=None, ai=None, mind=None, item=None, inventory=[]):
+		fighter=None, ai=None, mind=None, item=None):
 
 		self.x = x
 		self.y = y
@@ -247,9 +251,7 @@ class Object:
 			self.mind.name = "The mind of a %s."%self.name
 			self.mind.desc = "This is a %s's mind. It has stuff."%self.name
 
-		self.inventory = inventory
-		for thing in inventory:
-			thing.equip(self)
+		self.inventory = []
 
 		self.item = item
 		if self.item:
@@ -337,7 +339,12 @@ class Object:
 		equipped = None
 		for thing in self.inventory:
 			if thing.item.slot == slot:
-				return thing
+				return thing.item
+
+	def start_with(self, an_item):
+		self.inventory.append(an_item)
+		if an_item.item.equippable:
+			an_item.item.equip(self)
 
 class Fighter:
 	# all combat related properties.
@@ -409,7 +416,7 @@ def player_fighter():
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(mapping=1, parry=6))
+	return Mind(make_faculty_list(mapping=0, parry=0))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -421,7 +428,9 @@ def lumber_worker(x, y):
 	fighter_comp = Fighter(wounds = 2, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, doors=1))
-	return Object(x, y, 'L', 'lumberjack', libtcod.sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'L', 'lumberjack', libtcod.sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(axe(x, y))
+	return monster
 
 def hunter(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -509,7 +518,7 @@ def get_all_buffs(buffed):
 		buff_list.append(Buff(max_parries_bonus=buffed.mind.skills[1]))
 
 	for thing in buffed.inventory:
-		if thing.item is not None:
+		if thing.item is not None and thing.item.equipped:
 			buff_list.append(thing.item)
 
 	return buff_list
@@ -593,11 +602,11 @@ class Item():
 			if picker is player:
 				log("You picked up a " + self.owner.name + '!', libtcod.green)
 			if self.equippable and picker.get_equipped_in_slot(self.slot) is None:
-				self.equip()
+				self.equip(picker)
 
 	def drop(self, dropper):
 		if self.equipped:
-			self.unequip()
+			self.unequip(dropper)
 
 		objects.append(self.owner)
 		dropper.inventory.remove(self.owner)
@@ -637,9 +646,9 @@ class Item():
 			log("Equipped a " + self.owner.name + " as " + self.slot + ".", libtcod.light_green)
 
 	def unequip(self, user):
-		if not self.eqiupped:
+		if not self.equipped:
 			return None
-		self.eqiupped = False
+		self.equipped = False
 		if user is player:
 			log("Stopped equipping a " + self.owner.name + " as " + self.slot + ".", libtcod.light_red)
 
@@ -648,7 +657,19 @@ def no_use():
 
 def sword(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='weapon', power_bonus=1)
-	return Object(xpos, ypos, '/', 'sword', libtcod.white, walkable=True, always_visible=True, item=item_comp)
+	return Object(xpos, ypos, '/', 'sword', libtcod.light_gray, walkable=True, always_visible=True, item=item_comp)
+
+def axe(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='weaopn', power_bonus=2)
+	return Object(xpos, ypos, 'P', 'axe', libtcod.light_green, walkable=True, always_visible=True, item=item_comp)
+
+def leather_armor(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='armor', armor_bonus=1)
+	return Object(xpos, ypos, '&', 'leather armor', libtcod.light_sepia, walkable=True, always_visible=True, item=item_comp)
+
+def shield(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='offhand', max_parries_bonus=2)
+	return Object(xpos, ypos, ']', 'shield', libtcod.blue, walkable=True, always_visible=True, item=item_comp)
 
 class Tile:
 	# will build grass by default
@@ -886,10 +907,6 @@ def make_village_map():
 
 	player.x = x_off+1
 	player.y = y_off+1
-
-	sword_x = x_off+2
-	sword_y = y_off+2
-	objects.append(sword(sword_x, sword_y))
 
 	# refactor: tile_types = village_tiles(VILLAGE_TILES_HIGH*VILLAGE_TILES_WIDE)
 	tile_types = []
@@ -1867,6 +1884,23 @@ def handle_keys():
 				if obj.x == player.x and obj.y == player.y and obj.item:
 					obj.item.pick_up(player)
 					return 'took-turn'
+		elif key_char == 'i':
+			for thing in player.inventory:
+				print(thing.name)
+				print(thing.item.equipped)
+			for obj in objects:
+				inv = obj.inventory
+				print(obj.name)
+				for thing in inv:
+					print(thing.name)
+					print(thing.item.equipped)
+				return 'no-turn'
+		elif key_char == 'd':
+			for thing in player.inventory:
+				thing.item.drop(player)
+		elif key_char == 'w':
+			for thing in player.inventory:
+				thing.item.toggle_equip(player)
 
 	return 'no-turn'
 
