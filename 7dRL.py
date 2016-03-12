@@ -61,8 +61,6 @@ FOV_ALGO = 0
 
 TORCH_RADIUS = 16
 
-curr_map_width = 102
-curr_map_height = 102
 # Game loop functions
 
 def main_menu():
@@ -907,36 +905,6 @@ def initialize_ascii_maps():
 	# solid block
 	libtcod.console_map_ascii_code_to_font(151, 11, 13)
 
-def make_map():
-	global cur_map, objects#, stairs
-
-	objects = [player]
-
-	# a  is an array of tiles. Tile know what color they are.
-
-	cur_map = [[Tile('grass')
-		for y in range(curr_map_height) ]
-			for x in range(curr_map_width) ]
-
-	# Could modify tiles here.
-	# Currently, we just put stones circles every which way.
-
-	for x in range(roll(17,37)):
-		new_x = roll(0, curr_map_width)
-		new_y = roll(0, curr_map_height)
-		place_stone_patch(new_x, new_y)
-	
-	# we should put the player somewhere specific.
-
-	player.x = 10
-	player.y = 10
-
-	# we can generate objects here.
-
-	#stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white)
-	#objects.append(stairs)
-	#stairs.send_to_back()
-
 def make_village_map():
 	global cur_map, objects, curr_map_height, curr_map_width, board
 
@@ -1731,7 +1699,7 @@ def render_all_night():
 
 	player.draw()
 
-	libtcod.console_blit(board, camera_x, camera_y, curr_map_width, curr_map_height, 0, 0, 0)
+	libtcod.console_blit(board, camera_x, camera_y, CAMERA_WIDTH, CAMERA_HEIGHT, 0, 0, 0)
 
 	libtcod.console_clear(panel)
 
