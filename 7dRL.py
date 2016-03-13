@@ -59,7 +59,7 @@ LIMIT_FPS = 25
 FOV_ALGO = 0
 
 
-TORCH_RADIUS = 16
+TORCH_RADIUS = 10
 ENEMY_SIGHT = 6
 
 # Game loop functions
@@ -174,7 +174,9 @@ def new_game():
 
 	game_log = []
 
-	log('YOU ARE THE MIND EATER', libtcod.red)
+	log('Dusk is settling...', libtcod.white)
+	log('AND YOU ARE THE MIND EATER', libtcod.red)
+	log('PRESS e TO EAT A CORPSE\'S MIND', libtcod.red)
  
 	game_state = 'playing'
 	lookback = 0
@@ -330,12 +332,29 @@ class Object:
 			self.x = new_x
 			self.y = new_y
 			return True
-		elif cur_map[new_x][new_y].transparent and is_walkable(new_x+dx, new_y+dy) and self.mind is not None and self.mind.skills[11] > 0:
+		elif cur_map[new_x][new_y].transparent and in_range(new_x+dx, new_y+dy) and is_walkable(new_x+dx, new_y+dy) and self.mind is not None and self.mind.skills[11] > 0:
 			self.x = new_x + dx
 			self.y = new_y + dy
+			if cur_map[new_x][new_y].type == 'window':
+				cur_map[new_x][new_y].change_type('broken window')
+				say('The window shatters!', libtcod.light_blue, new_x, new_y, 15)
+				for obj in objects:
+					if obj.ai is not None and self.distance_to(obj) < 15:
+						obj.ai.get_message('alert', new_x, new_y)
+
 			return True
 		else:
 			return False
+
+	def wander(self):
+		new_x = roll(-1,1) + self.x
+		new_y = roll(-1,1) + self.y
+
+		if in_range(new_x, new_y) and is_walkable(new_x, new_y):
+			self.x = new_x
+			self.y = new_y
+			return True
+		return False
 
 	def move_towards(self, target_x, target_y):
 		dx = target_x - self.x
@@ -352,11 +371,44 @@ class Object:
 			dir_y = 0
 
 		success = self.move(dir_x, dir_y)
-		if not success:
+		if not success and dir_x != 0 and dir_y != 0:
 			if roll(0,1) == 0:
 				self.move(dir_x, 0)
 			else:
 				self.move(0, dir_y)
+		elif not success and dir_x == 0:
+			if roll(0,1) == 0:
+				self.move(-1, dir_y)
+			else:
+				self.move(1, dir_y)
+		elif not success and dir_y == 0:
+			if roll(0,1) == 0:
+				self.move(dir_x, -1)
+			else:
+				self.move(dir_x, 1)
+
+	def move_away(self, target_x, target_y):
+		dx = self.x - target_x
+		dy = self.y - target_y
+
+		if dx is not 0:
+			dir_x = dx/abs(dx)
+		else:
+			dir_x = 0
+		
+		if dy is not 0:
+			dir_y = dy/abs(dy)
+		else:
+			dir_y = 0
+
+		success = self.move(dir_x, dir_y)
+		if not success:
+			if roll(0,1) == 0:
+				return self.move(dir_x, 0)
+			else:
+				return self.move(0, dir_y)
+
+		return success
 
 	def move_astar(self, target_x, target_y):
 		# Create an FOV map tht has the dimensions of the map
@@ -545,7 +597,7 @@ def player_mind():
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = FarmerAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, first_aid=1, doors=1, dig=1))
 	monster =  Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(peasant_tool(x, y))
@@ -554,7 +606,7 @@ def farmer(x, y):
 
 def lumber_worker(x, y):
 	fighter_comp = Fighter(wounds = 2, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = LumberAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, doors=1))
 	monster = Object(x, y, 'L', 'lumberjack', libtcod.sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(axe(x, y))
@@ -563,7 +615,7 @@ def lumber_worker(x, y):
 
 def hunter(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = HunterAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1))
 	monster = Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(spear(x, y))
@@ -572,7 +624,7 @@ def hunter(x, y):
 
 def fisherman(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = FisherAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, doors=1, swim=1))
 	monster = Object(x, y, 'A', 'angler', libtcod.light_blue, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.mind.desc = 'To fish in a pond this size requires a special sort of mind.'
@@ -602,7 +654,7 @@ def village_guard(x, y, tlx, tly, state=0):
 
 def cow(x, y):
 	fighter_comp = Fighter(wounds = 6, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = CowAI()
 	mind_comp = Mind(make_faculty_list(run=1, vault=1))
 	monster = Object(x, y, 'C', 'cow', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.mind.desc = 'You never know what you may find.'
@@ -610,7 +662,7 @@ def cow(x, y):
 
 def chicken(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = ChickenAI()
 	mind_comp = Mind(make_faculty_list(search=2, dig=1))
 	monster =  Object(x, y, 'c', 'chicken', libtcod.dark_orange, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.mind.desc = 'You may be surprised by how observant these birds are.'
@@ -618,7 +670,7 @@ def chicken(x, y):
 
 def dog(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
-	ai_comp = BasicAI()
+	ai_comp = AlertDogAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, stealth=1, search=2, run=1, dig=1, swim=1, vault=1))
 	monster = Object(x, y, 'd', 'dog', libtcod.light_sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.mind.desc = 'Man\'s best friend. But you\'re the furthest thing from a man.'
@@ -721,6 +773,11 @@ def door_open_death(monster):
 	if player.mind.skills[7] == 0:
 
 		log('You shatter the door with a mighty crash!', libtcod.yellow)
+
+		for obj in objects:
+				if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+					obj.ai.get_message('alert', player.x, player.y)
+
 		monster.fighter = None
 		objects.remove(monster)
 		cur_map[monster.x][monster.y].change_type('wood floor')
@@ -739,6 +796,11 @@ def gate_open_death(monster):
 
 	if player.mind.skills[7] == 0:
 		log('You smash through the gate with a mighty crash!', libtcod.yellow)
+
+		for obj in objects:
+				if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+					obj.ai.get_message('alert', player.x, player.y)
+
 		monster.fighter = None
 		objects.remove(monster)
 		cur_map[monster.x][monster.y].change_type('grass')
@@ -817,6 +879,9 @@ class BasicAI:
 			monster.ai = newAI
 			newAI.owner = monster
 
+	def get_message(self, message, x, y):
+		return None
+
 class AlertAI():
 	# This is an AI that is aware of the pleyer, and moves to kill them.
 	def __init__(self, x, y):
@@ -837,6 +902,9 @@ class AlertAI():
 		else:
 			monster.move_towards(self.target_x, self.target_y)
 
+	def get_message(self, message, x, y):
+		return None
+
 class PsychoAI():
 	# this AI goes all, out, without regard to sightlines or what ever.
 	def take_turn(self):
@@ -848,6 +916,551 @@ class PsychoAI():
 
 		if player.fighter.wounds > 0 and dist < 2:
 			monster.fighter.attack(player)
+
+	def get_message(self, message, x, y):
+		return None
+
+class SurprisedPackAI():
+	def __init__(self, surprise_turns, x, y):
+		self.shock = max(0, surprise_turns)
+		self.x_sighted = x
+		self.y_sighted = y
+
+	def take_turn(self):
+		monster = self.owner
+
+		if self.shock > 0:
+			self.shock -= 1
+			return
+		else:
+			newAI = AlertPackAI(self.x_sighted, self.y_sighted)
+			monster = self.owner
+			say('Someone shouts: "I have seen the creature!"', libtcod.white, self.x_sighted, self.y_sighted, 25)
+
+			for obj in objects:
+				if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+					obj.ai.get_message('alert', player.x, player.y)
+
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+	def get_message(self, message, x, y):
+		return None
+
+class AlertPackAI():
+
+	def __init__(self, x, y):
+		self.target_x = x
+		self.target_y = y
+		self.wait = 20
+
+	def take_turn(self):
+		monster = self.owner
+
+		self.wait = max(self.wait -1, 0)
+		if enemy_can_see_player(monster):
+
+			self.target_x = player.x
+			self.target_y = player.y
+
+			friendly_count = 0
+			for obj in objects:
+				if obj.fighter is not None and obj is not player and obj.distance_to(player) < 6:
+					friendly_count += 1
+
+			if friendly_count > 2:
+				if monster.distance_to(player) >= 2:
+					monster.move_towards(player.x, player.y)
+
+				elif player.fighter.wounds > 0:
+					monster.fighter.attack(player)
+			elif monster.distance_to(player) < 5:
+				monster.move_away(player.x, player.y)
+			else:
+				monster.move_towards(player.x, player.y)
+
+			if self.wait == 0:
+
+				say('Someone shouts: "The creature is here!"', libtcod.white, self.target_x, self.target_y, 25)
+
+				for obj in objects:
+					if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+						obj.ai.get_message('alert', player.x, player.y)
+				self.wait += 25
+
+		elif monster.fighter.parries_left < monster.fighter.max_parries:
+			monster.fighter.rest
+		else:
+			monster.move_towards(self.target_x, self.target_y)
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.target_x = x
+			self.target_y = y
+
+class SurprisedLonerAI():
+	def __init__(self, surprise_turns, x, y):
+		self.shock = max(0, surprise_turns)
+		self.x_sighted = x
+		self.y_sighted = y
+
+	def take_turn(self):
+		monster = self.owner
+
+		if self.shock > 0:
+			self.shock -= 1
+			return
+		else:
+			newAI = AlertLonerAI(self.x_sighted, self.y_sighted)
+			monster = self.owner
+			say('Someone shouts: "I have seen the creature!"', libtcod.white, self.x_sighted, self.y_sighted, 25)
+
+			for obj in objects:
+				if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+					obj.ai.get_message('alert', player.x, player.y)
+
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+	def get_message(self, message, x, y):
+		return None
+
+class AlertLonerAI():
+
+	def __init__(self, x, y):
+		self.target_x = x
+		self.target_y = y
+		self.wait = 20
+
+	def take_turn(self):
+		monster = self.owner
+
+		self.wait = max(self.wait - 1, 0)
+		if enemy_can_see_player(monster):
+
+			self.target_x = player.x
+			self.target_y = player.y
+
+			if monster.distance_to(player) >= 2:
+				monster.move_towards(player.x, player.y)
+
+			elif player.fighter.wounds > 0:
+				monster.fighter.attack(player)
+
+			if self.wait == 0:
+
+				say('Someone shouts: "The creature is here!"', libtcod.white, self.target_x, self.target_y, 25)
+
+				for obj in objects:
+					if obj.ai is not None and monster.distance_to(obj) < 25 and obj is not monster:
+						obj.ai.get_message('alert', player.x, player.y)
+				self.wait += 25
+
+		elif monster.fighter.parries_left < monster.fighter.max_parries:
+			monster.fighter.rest
+		else:
+			monster.move_towards(self.target_x, self.target_y)
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.target_x = x
+			self.target_y = y
+
+class FarmerAI():
+
+	def __init__(self):
+		self.wait = 0
+
+	def take_turn(self):
+		monster = self.owner
+
+		if enemy_can_see_player(monster):
+			newAI = SurprisedPackAI(player.mind.skills[5]+1, player.x, player.y)
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			log('The %s gasps in surprise!'%monster.name, libtcod.white)
+			return
+		elif self.wait > 0:
+			self.wait -= 1
+		elif cur_map[monster.x][monster.y].type == 'crops':
+			chores = ['pruning', 'watering', 'weeding', 'killing a rat']
+			monster.wander()
+			say('The farmer begins %s.'%random.choice(chores), libtcod.white, monster.x, monster.y, 10)
+			self.wait += roll(25,40)
+		else:
+			monster.wander()
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			newAI = AlertPackAI(x, y)
+			monster = self.owner
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+class LumberAI():
+
+	def __init__(self):
+		self.wait = 0
+		self.state = 'looking'
+		self.progress = 0
+		self.tree_x = 0
+		self.tree_y = 0
+
+	def take_turn(self):
+		global cur_map
+		monster = self.owner
+
+		if enemy_can_see_player(monster):
+			newAI = SurprisedPackAI(player.mind.skills[5]+1, player.x, player.y)
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			log('The %s gasps in surprise!'%monster.name, libtcod.white)
+			return
+		elif self.state == 'looking':
+			monster.wander()
+			for x in range(monster.x - 1, monster.x + 2):
+				for y in range(monster.y - 1, monster.y + 2):
+					if in_range(x, y) and cur_map[x][y].type=='tree':
+						self.state = 'chopping'
+						self.progress = 75
+						self.tree_x = x
+						self.tree_y = y
+		elif self.progress > 0:
+			self.progress -= 1
+			if self.progress % 25 == 0:
+				say('The lumberjack chops at a tree.', libtcod.white, monster.x, monster.y, 15)
+		else:
+			self.state = 'looking'
+			cur_map[self.tree_x][self.tree_y].change_type('grass')
+			say('Someone shouts:"TIMBER!!!"', libtcod.white, monster.x, monster.y, 25)
+			initialize_fov()
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			newAI = AlertPackAI(x, y)
+			monster = self.owner
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+class FisherAI():
+
+	def __init__(self):
+		self.wait = 0
+
+	def take_turn(self):
+		monster = self.owner
+
+		if enemy_can_see_player(monster):
+			newAI = SurprisedPackAI(player.mind.skills[5]+1, player.x, player.y)
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			log('The %s gasps in surprise!'%monster.name, libtcod.white)
+			return
+		elif self.wait > 0:
+			self.wait -= 1
+		elif cur_map[monster.x][monster.y].type == 'shallow water':
+			actions = ['setting a lure', 'casting', 'twiddling his thumbs', 'pulling in the line', 'checking the line']
+			say('The angler begins %s.'%random.choice(actions), libtcod.white, monster.x, monster.y, 13)
+			self.wait += roll(20,30)
+		else:
+			for x in range(monster.x - 5, monster.x + 6):
+				for y in range(monster.y - 5, monster.y + 6):
+					if in_range(x, y) and cur_map[x][y].type=='shallow water':
+						monster.move_towards(x, y)
+						return
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			newAI = AlertPackAI(x, y)
+			monster = self.owner
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+class HunterAI():
+
+	def __init__(self):
+		self.wait = 0
+		self.wander_count = 0
+
+	def take_turn(self):
+		monster = self.owner
+
+		if enemy_can_see_player(monster):
+			newAI = SurprisedLonerAI(player.mind.skills[5]+1, player.x, player.y)
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			log('The %s gasps in surprise!'%monster.name, libtcod.white)
+			return
+		elif self.wander_count > 0:
+			monster.wander()
+			self.wander_count -= 1
+		elif self.wait > 0:
+			self.wait -= 1
+			if self.wait == 0:
+				self.wander_count += roll(15,25)
+		elif cur_map[monster.x][monster.y].type == 'shallow water':
+			actions = ['lying in wait', 'setting a snare', 'skinning some game', 'preparing some bait', 'sharpening a javelin']
+			say('The hunter begins %s.'%random.choice(actions), libtcod.white, monster.x, monster.y, 13)
+			self.wait += roll(20,30)
+		else:
+			monster.wander()
+						
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			newAI = AlertLonerAI(x, y)
+			monster = self.owner
+			monster.ai = newAI
+			newAI.owner = monster
+			monster.ai.take_turn()
+			return
+
+class CowAI():
+	def __init__(self):
+		self.state = 'calm'
+		self.target_x = 0
+		self.target_y =0
+
+	def take_turn(self):
+		the_cow = self.owner
+
+		if self.state == 'calm':
+			if the_cow.fighter.wounds < the_cow.fighter.max_wounds:
+				log('The cow BELLOWS!!!', libtcod.violet)
+				for obj in objects:
+					if obj.ai is not None and the_cow.distance_to(obj) < 50 and obj is not the_cow:
+						obj.ai.get_message('cow-rage', the_cow.x, the_cow.y)
+				self.state = 'rage'
+			else:
+				the_cow.wander()
+		elif self.state == 'rage':
+			if the_cow.fighter.wounds < 3:
+				self.state = 'flight'
+
+			if enemy_can_see_player(the_cow):
+				self.target_x = player.x
+				self.target_y = player.y
+
+				if the_cow.distance_to(player) >= 2:
+					the_cow.move_towards(player.x, player.y)
+				elif player.fighter.wounds > 0:
+					the_cow.fighter.attack(player)
+			else:
+				the_cow.move_towards(self.target_x, self.target_y)
+		else:
+			if enemy_can_see_player(the_cow):
+				the_cow.move_away(player.x, player.y)
+
+	def get_message(self, message, x, y):
+
+		if message == 'cow-rage':
+			self.state = 'rage'
+			log('A cow bellows in answer!')
+
+class AlertDogAI():
+
+	def __init__(self):
+		self.seen_player = False
+		self.target_x = 0
+		self.target_y = 0
+		self.friend = None
+		self.wait = 1
+
+	def take_turn(self):
+		the_dog = self.owner
+
+		if not self.seen_player:
+			if enemy_can_see_player(the_dog):
+				self.seen_player = True
+				self.target_x = player.x
+				self.target_y = player.y
+				self.take_turn()
+				return
+			elif self.friend is None:
+				min_dist = 25
+				friendly = None
+				for obj in objects:
+					if obj.mind is not None and obj.mind.skills[7] > 0 and obj is not player:
+						if obj.distance_to(the_dog) < min_dist:
+							min_dist = obj.distance_to(the_dog)
+							friendly = obj
+				if friendly is not None:
+					self.friend = friendly
+			if self.friend is not None:
+				the_dog.move_towards(self.friend.x, self.friend.y)
+			else:
+				the_dog.wander()
+		
+		if self.seen_player:
+			if enemy_can_see_player(the_dog):
+				self.target_x = player.x
+				self.target_y = player.y
+
+				if the_dog.distance_to(player) >= 2:
+					the_dog.move_towards(player.x, player.y)
+				elif player.fighter.wounds > 0:
+					the_dog.fighter.attack(player)
+
+				self.wait -= 1
+
+				if self.wait == 0:
+
+					say('BARK BARK BARK BARK BARK', libtcod.white, self.target_x, self.target_y, 45)
+
+					for obj in objects:
+						if obj.ai is not None and the_dog.distance_to(obj) < 45 and obj is not the_dog:
+							obj.ai.get_message('alert', player.x, player.y)
+					self.wait += 10
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.target_x = x
+			self.target_y = y
+
+class ChickenAI():
+
+	def __init__(self):
+		self.wait = roll(12,23)
+
+	def take_turn(self):
+		chick = self.owner
+
+		if enemy_can_see_player(chick):
+			if not chick.move_away(player.x, player.y):
+				chick.wander()
+		else:
+			chick.wander()
+
+		self.wait -= 1
+		if self.wait == 0:
+			say('cluck cluck cluck', libtcod.red, chick.x, chick.y, 12)
+			self.wait += roll(12,23)
+
+	def get_message(self, message, x, y):
+		return
+
+class SleepingPackAI():
+
+	def __init__(self):
+		self.wake_up_time = roll(4,9)
+		self.waking = False
+		self.snore_timer = roll(14,23)
+
+	def take_turn(self):
+		sleepy = self.owner
+
+		if sleepy.fighter.max_parries > sleepy.fighter.parries_left or sleepy.fighter.max_wounds > sleepy.fighter.wounds:
+			self.waking = True
+			say('It\'s here! TO ARMS!', libtcod.white, sleepy.x, sleepy.y, 15)
+
+		if not self.waking:
+			self.snore_timer -= 1
+			if self.snore_timer == 0:
+				say('ZZZZZZZZZZZ', libtcod.blue, sleepy.x, sleepy.y, 10)
+				self.snore_timer += roll(14, 23)
+		else:
+			self.wake_up_time -= 1
+			if self.wake_up_time == 0:
+				if enemy_can_see_player(sleepy):
+					for obj in objects:
+						if obj.ai is not None and sleepy.distance_to(obj) < 15 and obj is not sleepy:
+							obj.ai.get_message('alert', player.x, player.y)
+				newAI = AlertPackAI(sleepy.x, sleepy.y)
+				sleepy.ai = newAI
+				newAI.owner = sleepy
+				sleepy.ai.take_turn()
+				return
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.waking = True
+
+
+
+class SleepingLonerAI():
+	
+	def __init__(self):
+		self.wake_up_time = roll(3,7)
+		self.waking = False
+		self.snore_timer = roll(14,23)
+
+	def take_turn(self):
+		sleepy = self.owner
+
+		if sleepy.fighter.max_parries > sleepy.fighter.parries_left or sleepy.fighter.max_wounds > sleepy.fighter.wounds:
+			self.waking = True
+			say('It\'s here! TO ARMS!', libtcod.white, sleepy.x, sleepy.y, 15)
+
+		if not self.waking:
+			self.snore_timer -= 1
+			if self.snore_timer == 0:
+				say('ZZZZZZZZZZZ', libtcod.blue, sleepy.x, sleepy.y, 10)
+				self.snore_timer += roll(14, 23)
+		else:
+			self.wake_up_time -= 1
+			if self.wake_up_time == 0:
+				if enemy_can_see_player(sleepy):
+					for obj in objects:
+						if obj.ai is not None and sleepy.distance_to(obj) < 15 and obj is not sleepy:
+							obj.ai.get_message('alert', player.x, player.y)
+				newAI = AlertLonerAI(sleepy.x, sleepy.y)
+				sleepy.ai = newAI
+				newAI.owner = sleepy
+				sleepy.ai.take_turn()
+				return
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.waking = True
+
+class SleepingDogAI():
+
+	def __init__(self):
+		self.wake_up_time = roll(4,9)
+		self.waking = False
+		self.snore_timer = roll(14,23)
+
+	def take_turn(self):
+		sleepy = self.owner
+
+		if sleepy.fighter.max_parries > sleepy.fighter.parries_left or sleepy.fighter.max_wounds > sleepy.fighter.wounds:
+			self.waking = True
+			say('BARK BARK BARK', libtcod.white, sleepy.x, sleepy.y, 25)
+
+		if not self.waking:
+			self.snore_timer -= 1
+			if self.snore_timer == 0:
+				say('ZZZZZZZZZZZ', libtcod.blue, sleepy.x, sleepy.y, 10)
+				self.snore_timer += roll(14, 23)
+		else:
+			self.wake_up_time -= 1
+			if self.wake_up_time == 0:
+				if enemy_can_see_player(sleepy):
+					for obj in objects:
+						if obj.ai is not None and sleepy.distance_to(obj) < 25 and obj is not sleepy:
+							obj.ai.get_message('alert', player.x, player.y)
+				newAI = AlertDogAI()
+				sleepy.ai = newAI
+				newAI.owner = sleepy
+				sleepy.ai.take_turn()
+				return
+
+	def get_message(self, message, x, y):
+		if message == 'alert':
+			self.waking = True
 
 class VillageGuardAI():
 
@@ -911,6 +1524,13 @@ class VillageGuardAI():
 			if monster.x == self.tlx +19 and monster.y == self.tly:
 				self.state = 0
 				self.wait = 5
+
+	def get_message(self, message, x, y):
+		return None
+
+def say(msg, col, x, y, vol):
+	if player.distance(x,y) < vol:
+		log(msg, col)
 
 class Item():
 	# object can have an item component. this makes them an item. 
@@ -1022,6 +1642,14 @@ def peasant_tool(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='weapon')
 	return Object(xpos, ypos, 'x', random.choice(tool_names), libtcod.fuchsia, walkable=True, always_visible=True, item=item_comp)
 
+def javelin(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='missile')
+	return Object(xpos, ypos, '!', 'javelin', libtcod.light_red, walkable=True, always_visible=True, item=item_comp)
+
+def magic_amulet(xpos, ypos):
+	item_comp = Item(use_function=no_use, equippable=True, slot='necklace', max_wounds_bonus=1)
+	return Object(xpos, ypos, 'q', 'amulet', libtcod.light_violet, walkable=True, always_visible=True, item=item_comp)
+
 def leather_armor(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='armor', armor_bonus=1)
 	return Object(xpos, ypos, '&', 'leather armor', libtcod.light_sepia, walkable=True, always_visible=True, item=item_comp)
@@ -1080,6 +1708,8 @@ def terrain_tile(terrain):
 		return (True, True, False, False, libtcod.light_sepia, libtcod.light_sepia, '.')
 	if terrain == 'window':
 		return (False, True, True, False, libtcod.light_blue, libtcod.light_blue, '#')
+	if terrain == 'broken window':
+		return (False, True, True, False, libtcod.light_blue, libtcod.light_blue, ',')
 	if terrain == 'dirt road':
 		return (True, True, False, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
 	if terrain == 'cobble road':
@@ -1232,17 +1862,17 @@ def make_village_map():
 
 				staggered_path(from_road_x, from_road_y, to_road_x, to_road_y, 'dirt road')
 
-	walled_x = roll(1, VILLAGE_TILES_WIDE - 3)
-	walled_y = roll(1, VILLAGE_TILES_HIGH - 3)
+	#walled_x = roll(1, VILLAGE_TILES_WIDE - 3)
+	#walled_y = roll(1, VILLAGE_TILES_HIGH - 3)
 
-	top_left_corners = []
+	#top_left_corners = []
 
-	walled_tiles = [(walled_x, walled_y), (walled_x+1, walled_y+1), (walled_x+1, walled_y), (walled_x, walled_y+1)]
+	#walled_tiles = [(walled_x, walled_y), (walled_x+1, walled_y+1), (walled_x+1, walled_y), (walled_x, walled_y+1)]
 
-	for y in range(VILLAGE_TILES_HIGH):
-		for x in range(VILLAGE_TILES_WIDE):
-			if walled_tiles.count((x, y)) == 0:
-				top_left_corners.append((x*VILLAGE_TILE_SIZE, y*VILLAGE_TILE_SIZE))
+	#for y in range(VILLAGE_TILES_HIGH):
+	#	for x in range(VILLAGE_TILES_WIDE):
+	#		if walled_tiles.count((x, y)) == 0:
+	#			top_left_corners.append((x*VILLAGE_TILE_SIZE, y*VILLAGE_TILE_SIZE))
 
 	random.shuffle(top_left_corners)
 
@@ -1264,7 +1894,7 @@ def make_village_map():
 	# refactor: tile_types = village_tiles(VILLAGE_TILES_HIGH*VILLAGE_TILES_WIDE)
 	tile_types = []
 
-	tot_tiles = VILLAGE_TILES_WIDE * VILLAGE_TILES_HIGH - 5
+	tot_tiles = VILLAGE_TILES_WIDE * VILLAGE_TILES_HIGH - 1
 
 	for x in range(tot_tiles / 6):
 		tile_types.append(0)
@@ -1303,7 +1933,7 @@ def make_village_map():
 		elif choice == 5:
 			place_pens(tile[0], tile[1], VILLAGE_TILE_SIZE)
 
-	place_walled_village(walled_x*VILLAGE_TILE_SIZE, walled_y*VILLAGE_TILE_SIZE)
+	#place_walled_village(walled_x*VILLAGE_TILE_SIZE, walled_y*VILLAGE_TILE_SIZE)
 
 def place_stone_patch(xpos, ypos):
 	global cur_map
@@ -1352,6 +1982,14 @@ def place_copse(xpos, ypos, tile_size):
 			if is_walkable(hunt_x, hunt_y):
 				objects.append(hunter(hunt_x, hunt_y))
 				num_hunters -= 1
+				dog_spots = []
+				for x in range(hunt_x-1, hunt_x+2):
+					for y in range(hunt_y-1, hunt_y+2):
+						if (in_range(x, y) and is_walkable(x, y)):
+							dog_spots.append((x, y)) 
+				if len(dog_spots) > 0:
+					(dog_x, dog_y) = random.choice(dog_spots)
+					objects.append(dog(dog_x, dog_y))
 
 def place_pond(xpos, ypos, tile_size):
 	global cur_map
@@ -1440,15 +2078,30 @@ def place_cottage(xpos, ypos, tile_size):
 		if is_walkable(xpos, ypos):
 			which = roll(0,4)
 			if which == 0:
-				objects.append(farmer(xpos, ypos))
+				mons = farmer(xpos, ypos)
+				mons.ai = SleepingPackAI()
+				mons.ai.owner = mons
+				objects.append(mons)
 			elif which == 1:
-				objects.append(hunter(xpos, ypos))
+				mons = hunter(xpos, ypos)
+				mons.ai = SleepingLonerAI()
+				mons.ai.owner = mons
+				objects.append(mons)
 			elif which == 2:
-				objects.append(lumber_worker(xpos, ypos))
+				mons = lumber_worker(xpos, ypos)
+				mons.ai = SleepingPackAI()
+				mons.ai.owner = mons
+				objects.append(mons)
 			elif which == 3:
-				objects.append(fisherman(xpos, ypos))
+				mons = fisherman(xpos, ypos)
+				mons.ai = SleepingPackAI()
+				mons.ai.owner = mons
+				objects.append(mons)
 			elif which == 4:
-				objects.append(guard(xpos, ypos))
+				mons = guard(xpos, ypos)
+				mons.ai = SleepingLonerAI()
+				mons.ai.owner = mons
+				objects.append(mons)
 			occupants -= 1
 
 	num_dogs = roll(1,3)
@@ -1457,7 +2110,10 @@ def place_cottage(xpos, ypos, tile_size):
 		xpos = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
 		ypos = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
 		if is_walkable(xpos, ypos):
-			objects.append(dog(xpos, ypos))
+			a_dog = dog(xpos, ypos)
+			a_dog.ai = SleepingDogAI()
+			a_dog.ai.owner = a_dog
+			objects.append(a_dog)
 		num_dogs -= 1
 
 	door_wall = roll(0,3)
@@ -2146,16 +2802,18 @@ def skills_menu():
 def controls_screen():
 	options = []
 
-	options.append('Arrow Keys - Move')
 	options.append('Num Pad - Move')
 	options.append('Space - Rest (recover parries)')
 	options.append('e - Eat minds')
+	options.append('g - Get item')
 	options.append('f - Perform first aid *')
 	options.append('r - Run (parries -> free moves) *')
 	options.append('d - Dig for \'loot\' *')
 	options.append('Escape - Menu')
 	options.append('[ - Older messages')
 	options.append('] - More recent messages')
+	options.append('Arrow Keys - Move')
+	options.append('vi Keys - Move')
 	single_screen('CONTROLS (* = skill required)', options)
 	return None
 
@@ -2201,26 +2859,26 @@ def handle_keys():
 		return escape_menu()
 
 	if game_state == 'playing':
-		if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
+		key_char = chr(key.c)
+
+		if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8 or key_char == 'k':
 			return player_move_or_attack(0,-1)
-		elif key.vk == libtcod.KEY_KP9:
+		elif key.vk == libtcod.KEY_KP9 or key_char == 'u':
 			return player_move_or_attack(1,-1)
-		elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6:
+		elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6 or key_char == 'l':
 			return player_move_or_attack(1,0)
-		elif key.vk == libtcod.KEY_KP3:
+		elif key.vk == libtcod.KEY_KP3 or key_char == 'n':
 			return player_move_or_attack(1,1)
-		elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2:
+		elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2 or key_char == 'j':
 			return player_move_or_attack(0,1)
-		elif key.vk == libtcod.KEY_KP1:
+		elif key.vk == libtcod.KEY_KP1 or key_char == 'b':
 			return player_move_or_attack(-1,1)
-		elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4:
+		elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4 or key_char == 'h':
 			return player_move_or_attack(-1,0)
-		elif key.vk == libtcod.KEY_KP7:
+		elif key.vk == libtcod.KEY_KP7 or key_char == 'y':
 			return player_move_or_attack(-1,-1)
 		elif key.vk == libtcod.KEY_KP5 or key.vk == libtcod.KEY_SPACE:
 			return player_pause()
-
-		key_char = chr(key.c)
 
 		if key_char == 'e':
 			return player_eat_mind()
@@ -2229,23 +2887,23 @@ def handle_keys():
 				if obj.x == player.x and obj.y == player.y and obj.item:
 					obj.item.pick_up(player)
 					return 'took-turn'
-		elif key_char == 'i':
-			for thing in player.inventory:
-				print(thing.name)
-				print(thing.item.equipped)
-			return 'no-turn'
+		#elif key_char == 'i':
+		#	for thing in player.inventory:
+		#		print(thing.name)
+		#		print(thing.item.equipped)
+		#	return 'no-turn'
 		elif key_char == 'f':
 			return player.fighter.first_aid()
 		elif key_char == 'r' and player.mind.skills[8] > 0:
 			return player.fighter.run_prep()
 		elif key_char == 'd' and player.mind.skills[9] > 0:
 			return player_dig(player.x, player.y)
-		elif key_char == 'D':
-			while len(player.inventory) > 0:
-				player.inventory[0].item.drop(playinger)
-		elif key_char == 'w':
-			for thing in player.inventory:
-				thing.item.toggle_equip(player)
+		#elif key_char == 'D':
+		#	while len(player.inventory) > 0:
+		#		player.inventory[0].item.drop(player)
+		#elif key_char == 'w':
+		#	for thing in player.inventory:
+		#		thing.item.toggle_equip(player)
 		elif key_char == '[':
 			lookback += 5
 		elif key_char == ']':
@@ -2387,7 +3045,7 @@ def num_to_faculty_description(ind, magnitude=1):
 	if ind == 5:
 		return 'You can duck down to hide behind or in low obstructions.'
 	if ind == 6:
-		return 'You can see things that are hiding behind or in low obstructions.'
+		return 'You can see further and clearer than before.'
 	if ind == 7:
 		return 'You can open doors without making a racket.'
 	if ind == 8:
