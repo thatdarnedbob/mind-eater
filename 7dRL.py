@@ -51,8 +51,8 @@ LOG_Y = 1
 MENU_WIDTH = 40
 MENU_MAX_HEIGHT = 40
 
-VILLAGE_TILES_HIGH = 4
-VILLAGE_TILES_WIDE = 4
+VILLAGE_TILES_HIGH = 6
+VILLAGE_TILES_WIDE = 6
 VILLAGE_TILE_SIZE = 20
 
 LIMIT_FPS = 25
@@ -160,7 +160,7 @@ def instruction_menu():
 	exit(0)
 
 def new_game():
-	global player, game_state, game_log, target, lookback, objects, player_wait
+	global player, game_state, game_log, target, lookback, objects, player_wait, cooldown
 
 	if os.path.isfile('savegame'):
 		os.remove('savegame')
@@ -181,10 +181,8 @@ def new_game():
 	game_state = 'playing'
 	lookback = 0
 	player_wait = 0
+	cooldown = 7
 
-	player.start_with(sword(0, 0))
-	player.start_with(shield(0, 0))
-	player.start_with(leather_armor(0, 0))
 	#player.start_with(axe(0, 0))
 
 	for obj in objects:
@@ -492,7 +490,8 @@ class Object:
 				return thing.item
 
 	def start_with(self, an_item):
-		self.inventory.append(an_item)
+		#self.inventory.append(an_item)
+		objects.append(an_item)
 		if an_item.item.equippable:
 			an_item.item.equip(self)
 
@@ -543,8 +542,8 @@ class Fighter:
 	def attack(self, target):
 		target.fighter.take_damage(self.power)
 
-	def take_damage(self, damage):
-		if self.parries_left >= 1 and self.owner.get_equipped_in_slot('weapon') is not None:
+	def take_damage(self, damage, unblockable=False):
+		if self.parries_left >= 1 and self.owner.get_equipped_in_slot('weapon') is not None and not unblockable:
 			self.parries_left -= 1
 			log(self.owner.name.capitalize() + ' parries the blow!')
 		else:
@@ -593,7 +592,9 @@ def player_fighter():
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(armor=1, weapon=1, mapping=1, parry=3, stealth=1))
+	return Mind(make_faculty_list())
+	# for cheats, come here! just remove the # from the next line, and put on in front of the previous line.
+	# return Mind(make_faculty_list(armor=1, weapon=1, mapping=1, parry=3, stealth=1, throw=1))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -616,9 +617,10 @@ def lumber_worker(x, y):
 def hunter(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = HunterAI()
-	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1))
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1, throw=1))
 	monster = Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(spear(x, y))
+	monster.start_with(javelin(x, y))
 	monster.mind.desc = 'A hunter\'s skills let him become one with the night.'
 	return monster
 
@@ -650,6 +652,15 @@ def village_guard(x, y, tlx, tly, state=0):
 	monster.start_with(shield(x, y))
 	monster.start_with(leather_armor(x, y))
 	monster.mind.desc = 'A guard\'s mind is a killing machine, but you would have had to be better already to get at this, right?'
+	return monster
+
+def mad_mage(x, y):
+	fighter_comp = Fighter(wounds=2, defense=0, power=6, armor=1, xp=0, death_function=monster_death)
+	ai_comp = MadMageAI(x, y)
+	mind_comp = Mind(make_faculty_list(magic=1))
+	monster = Object(x, y, 'W', 'Mad Wizard', libtcod.cyan, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(magic_amulet(x,y))
+	monster.mind.desc = 'Hopefully you can make sense of the swirling craze within...'
 	return monster
 
 def cow(x, y):
@@ -846,7 +857,6 @@ def player_can_see_enemy(monster):
 		return False
 	else:
 		return (libtcod.map_is_in_fov(fov_map, monster.x, monster.y) and libtcod.map_is_in_fov(stealth_fov_map, monster.x, monster.y))
-
 
 class Buff:
 	def __init__(self, power_bonus=0, armor_bonus=0, max_wounds_bonus=0, max_parries_bonus=0, max_runs_bonus=0):
@@ -1045,11 +1055,19 @@ class AlertLonerAI():
 			self.target_x = player.x
 			self.target_y = player.y
 
-			if monster.distance_to(player) >= 2:
-				monster.move_towards(player.x, player.y)
-
-			elif player.fighter.wounds > 0:
+			if monster.distance_to(player) < 2 and player.fighter.wounds > 0:
 				monster.fighter.attack(player)
+			elif monster.distance_to(player) < 6 and player.fighter.wounds > 0 and monster.get_equipped_in_slot('missile') is not None:
+				missile = monster.get_equipped_in_slot('missile')
+				if missile is not None:
+					log('The %s threw a javelin! BRUTAL!'%monster.name, libtcod.red)
+					player.fighter.take_damage(1, unblockable=True)
+					monster.inventory.remove(missile.owner)
+					new_jav = javelin(player.x, player.y)
+					objects.append(new_jav)
+					new_jav.send_to_back()
+			elif monster.distance_to(player) >= 6:
+				monster.move_towards(player.x, player.y)
 
 			if self.wait == 0:
 
@@ -1355,7 +1373,7 @@ class ChickenAI():
 class SleepingPackAI():
 
 	def __init__(self):
-		self.wake_up_time = roll(4,9)
+		self.wake_up_time = roll(7,12)
 		self.waking = False
 		self.snore_timer = roll(14,23)
 
@@ -1388,12 +1406,10 @@ class SleepingPackAI():
 		if message == 'alert':
 			self.waking = True
 
-
-
 class SleepingLonerAI():
 	
 	def __init__(self):
-		self.wake_up_time = roll(3,7)
+		self.wake_up_time = roll(6,11)
 		self.waking = False
 		self.snore_timer = roll(14,23)
 
@@ -1528,6 +1544,50 @@ class VillageGuardAI():
 	def get_message(self, message, x, y):
 		return None
 
+class MadMageAI():
+	def __init__(self, center_x, center_y):
+		self.center_x = center_x
+		self.center_y = center_y
+		self.state = 0
+		self.babble = roll(3,6)
+
+	def take_turn(self):
+		wiz = self.owner
+
+		if enemy_can_see_player(wiz):
+			self.state = 4
+
+		if self.state == 0:
+			wiz.move_towards(self.center_x, self.center_y - 7)
+			if wiz.x == self.center_x and wiz.y == self.center_y -7:
+				self.state = 1
+		if self.state == 1:
+			wiz.move_towards(self.center_x+7, self.center_y)
+			if wiz.x == self.center_x + 7 and wiz.y == self.center_y:
+				self.state = 2
+		if self.state == 2:
+			wiz.move_towards(self.center_x, self.center_y +7)
+			if wiz.x == self.center_x and wiz.y == self.center_y+7:
+				self.state = 3
+		if self.state == 3:
+			wiz.move_towards(self.center_x -7, self.center_y)
+			if wiz.x == self.center_x - 7 and wiz.y == self.center_y:
+				self.state = 0
+		if self.state == 4:
+			if enemy_can_see_player(wiz):
+				if wiz.distance_to(player) >= 2:
+					wiz.move_towards(player.x, player.y)
+
+				elif player.fighter.wounds > 0:
+					wiz.fighter.attack(player)
+			else:
+				wiz.wander()
+
+		say('The mad wizard babbles...%i'%self.state, libtcod.fuchsia, wiz.x, wiz.y, 10)
+
+	def get_message(self, message, x, y):
+		return
+
 def say(msg, col, x, y, vol):
 	if player.distance(x,y) < vol:
 		log(msg, col)
@@ -1554,10 +1614,7 @@ class Item():
 
 	def pick_up(self, picker):
 
-		picker.inventory.append(self.owner)
-		objects.remove(self.owner)
-		if picker is player:
-			log('You picked up a ' + self.owner.name + '!', libtcod.green)
+		
 		self.equip(picker)
 
 	def drop(self, dropper):
@@ -1594,20 +1651,31 @@ class Item():
 			self.equip(user)
 
 	def equip(self, user):
+		if user is player:
+			log('You picked up a ' + self.owner.name + '!', libtcod.green)
 		old_shiz = user.get_equipped_in_slot(self.slot)
 		if old_shiz is not None:
 			old_shiz.drop(user)
 
 		if user.mind.skills[2] == 0 and self.slot == 'weapon':
 			if user is player:
-				log('Need to learn how to use weapons first!')
+				log('But you need to learn how to use weapons first!')
 			return
 		elif user.mind.skills[3] == 0 and self.slot == 'armor':
 			if user is player:
-				log('Need to learn how to use armor first!')
+				log('But you need to learn how to use armor first!')
+			return
+		elif user.mind.skills[12] == 0 and self.slot == 'missile':
+			if user is player:
+				log('But you need to learn how to use javelins first!')
 			return
 		else:
 			self.equipped = True
+			user.inventory.append(self.owner)
+			objects.remove(self.owner)
+
+		if self.slot == 'necklace' and user is player:
+			player.fighter.wounds = player.fighter.max_wounds
 
 		if user.fighter is not None:
 			user.fighter.parries_left = min(user.fighter.parries_left, user.fighter.max_parries)
@@ -1662,6 +1730,24 @@ def running_shoes(xpos, ypos):
 	item_comp = Item(use_function=no_use, equippable=True, slot='feet', max_runs_bonus=1)
 	return Object(xpos, ypos, '"', 'running shoes', libtcod.yellow, walkable=True, always_visible=True, item=item_comp)
 
+def random_item(xpos, ypos):
+	which = roll(0,6)
+
+	if which == 0:
+		return sword(xpos, ypos)
+	if which == 1:
+		return axe(xpos, ypos)
+	if which == 2:
+		return spear(xpos, ypos)
+	if which == 3:
+		return javelin(xpos, ypos)
+	if which == 4:
+		return leather_armor(xpos, ypos)
+	if which == 5:
+		return shield(xpos, ypos)
+	if which == 6:
+		return running_shoes(xpos, ypos)
+
 class Tile:
 	# will build grass by default
 
@@ -1694,7 +1780,7 @@ def terrain_tile(terrain):
 	if terrain == 'water':
 		return (False, True, False, True, libtcod.darker_blue, libtcod.dark_blue, '~')
 	if terrain == 'crops':
-		return (True, True, False, True, libtcod.sepia, libtcod.amber, 'C')
+		return (True, True, False, True, libtcod.sepia, libtcod.amber, 'w')
 	if terrain == 'fence':
 		return (False, True, True, False, libtcod.green, libtcod.dark_sepia, '#')
 	if terrain == 'low stone wall':
@@ -1891,6 +1977,13 @@ def make_village_map():
 	player.x = x_off+1
 	player.y = y_off+1
 
+	
+		# go here for CHEATS. remove # signs.
+	#objects.append(sword(x_off+2, y_off+1))
+	#objects.append(shield(x_off+1, y_off+2))
+	#objects.append(leather_armor(x_off+2, y_off+2))
+	#objects.append(javelin(x_off+3, y_off+3))
+
 	# refactor: tile_types = village_tiles(VILLAGE_TILES_HIGH*VILLAGE_TILES_WIDE)
 	tile_types = []
 
@@ -1908,6 +2001,8 @@ def make_village_map():
 		tile_types.append(4)
 	for x in range(tot_tiles / 20):
 		tile_types.append(5)
+
+	tile_types.append(6)
 
 	random.shuffle(tile_types)
 
@@ -1932,6 +2027,8 @@ def make_village_map():
 			place_graves(tile[0], tile[1], VILLAGE_TILE_SIZE)
 		elif choice == 5:
 			place_pens(tile[0], tile[1], VILLAGE_TILE_SIZE)
+		elif choice == 6:
+			place_wizard_tower(tile[0], tile[1], VILLAGE_TILE_SIZE)
 
 	#place_walled_village(walled_x*VILLAGE_TILE_SIZE, walled_y*VILLAGE_TILE_SIZE)
 
@@ -1973,7 +2070,7 @@ def place_copse(xpos, ypos, tile_size):
 				num_jacks -= 1
 
 	if hunters:
-		num_hunters = roll(1,3)
+		num_hunters = roll(1,2)
 
 		while num_hunters > 0:
 			hunt_x = roll(xpos, xpos + tile_size - 1)
@@ -2070,6 +2167,11 @@ def place_cottage(xpos, ypos, tile_size):
 
 		rectangle_place_gaps(wall_start_x, wall_start_y, wall_total_w, wall_total_h, 'grass',
 			[chance(1,2),chance(1,2),chance(1,2),chance(1,2)], at_least_one=False)
+
+	x_item = roll(cottage_start_x + 1, cottage_start_x + cottage_w - 2)
+	y_item = roll(cottage_start_y + 1, cottage_start_y + cottage_h - 2)
+
+	objects.append(random_item(x_item, y_item))
 
 	occupants = roll(1,3)
 	while occupants > 0:
@@ -2228,6 +2330,20 @@ def place_pens(xpos, ypos, tile_size):
 		new_gate = gate(gate_x, gate_y)
 		objects.append(new_gate)
 		new_gate.send_to_back()
+
+def place_wizard_tower(xpos, ypos, tile_size):
+	center_x = xpos + tile_size / 2 - 1
+	center_y = ypos + tile_size / 2 - 1
+
+	radial_tile_paint(8, center_x, center_y, 'stone wall')
+	radial_tile_paint(6, center_x, center_y, 'stone')
+	radial_tile_paint(4, center_x, center_y, 'stone wall')
+	radial_tile_paint(2, center_x, center_y, 'stone')
+
+	rectangle_tile_fill(center_x-8, center_y, 17, 1, 'stone')
+	rectangle_tile_fill(center_x, center_y-8, 1, 17, 'stone')
+
+	objects.append(mad_mage(center_x, center_y))
 
 def place_walled_village(xpos, ypos):
 	global cur_map, objects
@@ -2809,6 +2925,7 @@ def controls_screen():
 	options.append('f - Perform first aid *')
 	options.append('r - Run (parries -> free moves) *')
 	options.append('d - Dig for \'loot\' *')
+	options.append('t - Throw missile weapon *')
 	options.append('Escape - Menu')
 	options.append('[ - Older messages')
 	options.append('] - More recent messages')
@@ -2842,7 +2959,7 @@ def end_game_menu():
 		if total_score < 5:
 			options.append('Survival is sweeter than death, but not by much.')
 		elif total_score < 12:
-			options.append('Noble efforts can be their own reward.')
+			options.append('Your noble efforts are their own reward.')
 		elif total_score < 20:
 			options.append('Success and victory are yours!')
 		else:
@@ -2885,7 +3002,7 @@ def handle_keys():
 		elif key_char == 'g':
 			for obj in objects:
 				if obj.x == player.x and obj.y == player.y and obj.item:
-					obj.item.pick_up(player)
+					obj.item.equip(player)
 					return 'took-turn'
 		#elif key_char == 'i':
 		#	for thing in player.inventory:
@@ -2898,6 +3015,10 @@ def handle_keys():
 			return player.fighter.run_prep()
 		elif key_char == 'd' and player.mind.skills[9] > 0:
 			return player_dig(player.x, player.y)
+		elif key_char == 't' and player.mind.skills[12] > 0:
+			return player_chuck_javelin()
+		elif key_char == 'x' and player.mind.skills[13] > 0:
+			return player_inferno()
 		#elif key_char == 'D':
 		#	while len(player.inventory) > 0:
 		#		player.inventory[0].item.drop(player)
@@ -2908,6 +3029,16 @@ def handle_keys():
 			lookback += 5
 		elif key_char == ']':
 			lookback = max(0, lookback - 5)
+	elif game_state == 'dead':
+		key_char = chr(key.c)
+
+		if key_char == '[':
+			lookback += 5
+			render_all_night()
+		elif key_char == ']':
+			lookback = max(0, lookback - 5)
+			render_all_night()
+
 
 	return 'no-turn'
 
@@ -3005,6 +3136,53 @@ def player_eat_mind():
 
 	return 'took-turn'
 
+def player_chuck_javelin():
+
+	missile = player.get_equipped_in_slot('missile')
+	if missile is None:
+		log('Need a javelin to throw one!', libtcod.red)
+		return 'no-turn'
+
+	min_dist = sqrt(cur_map_width ** 2 + cur_map_height **2) + 10
+	pin_cushion = None
+	for obj in objects:
+		if obj is not player and obj.fighter is not None and obj.name != 'gate' and obj.name != 'door' and libtcod.map_is_in_fov(fov_map, obj.x, obj.y) and player.distance_to(obj) < min_dist:
+			pin_cushion = obj
+			min_dist = player.distance_to(obj)
+
+	if pin_cushion is None:
+		log('No target close enough for you!', libtcod.red)
+		return 'no-turn'
+	if player.distance_to(pin_cushion) < 6:
+		player.inventory.remove(missile.owner)
+		log('You threw a javelin! BRUTAL!', libtcod.red)
+		pin_cushion.fighter.take_damage(2, unblockable=True)
+		return 'took-turn'
+	else:
+		log('No target close enough for you!', libtcod.red)
+		return 'no-turn'
+
+def player_inferno():
+	global cooldown
+
+	if cooldown > 0:
+		cooldown -= 1
+		if cooldown > 0:
+			log("You build your power... only %i more times to go..."%cooldown, libtcod.fuchsia)
+		else:
+			log("THE INFERNO IS READY", libtcod.magenta)
+		return 'took-turn'
+
+	cooldown = 7
+	log('Finally it is ready! You unleash HELLFIRE!', libtcod.fuchsia)
+
+	for obj in objects:
+		if obj is not player and obj.fighter is not None and player.distance_to(obj) < 16:
+			log('Under your withering flames, the %s burns!'%obj.name, libtcod.red)
+			obj.fighter.take_damage(7, unblockable=True)
+
+	return 'took-turn'
+
 def num_to_faculty_name(ind, magnitude=1):
 	if ind == 0:
 		return 'Mapping'
@@ -3030,6 +3208,10 @@ def num_to_faculty_name(ind, magnitude=1):
 		return 'Swimming'
 	if ind == 11:
 		return 'Vaulting'
+	if ind == 12:
+		return 'Throwing'
+	if ind == 13:
+		return 'Infernal Spell'
 
 def num_to_faculty_description(ind, magnitude=1):
 	if ind == 0:
@@ -3056,11 +3238,15 @@ def num_to_faculty_description(ind, magnitude=1):
 		return 'You can cross over deep water.'
 	if ind == 11:
 		return 'With a bound, you can now vault over low obstacles.'
+	if ind == 12:
+		return 'You can jack a javelin straight into some dude\'s chest.'
+	if ind == 13:
+		return 'Press x repeatedly to build magical power, and then again to unleash it, witheringly!'
 
 def make_faculty_list(mapping=0, parry=0, weapon=0, armor=0, first_aid=0, stealth=0, 
-	search=0, doors=0, run=0, dig=0, swim=0, vault=0):
+	search=0, doors=0, run=0, dig=0, swim=0, vault=0, throw=0, magic=0):
 
-	return [mapping, parry, weapon, armor, first_aid, stealth, search, doors, run, dig, swim, vault]
+	return [mapping, parry, weapon, armor, first_aid, stealth, search, doors, run, dig, swim, vault, throw, magic]
 
 def mindeating_menu(eaten_mind):
 	options = []
