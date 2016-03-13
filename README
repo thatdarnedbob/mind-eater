@@ -4,6 +4,12 @@ This is a game I'm working on for the Seven-Day Rogue-Like challenge. Two big fi
 
 How to run this:
 
-You need Python 2.7.
+You need Python 2.7 and libtcodpy to run this game.
 
-If you have that installed, it should be a matter of just running 'python MindEater.py' from inside the folders I'll provide.
+On my pc, it works in a folder with just MindEater.py, libtcodpy.py, libtcod-mingw.dll, SDL.dll, and the terminal12x12.png font from libtcod.
+
+On a mac, it works in a folder with just MindEater.py, libtcodpy.py, cprotos.py (from libtcod), and the terminal12x12.png font.
+
+In either case, just use 'python MindEater.py' from a command line to start the game.
+
+Some of this may be wrong because I am very bad at computers right now.
