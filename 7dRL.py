@@ -51,8 +51,8 @@ LOG_Y = 1
 MENU_WIDTH = 40
 MENU_MAX_HEIGHT = 40
 
-VILLAGE_TILES_HIGH = 5
-VILLAGE_TILES_WIDE = 5
+VILLAGE_TILES_HIGH = 4
+VILLAGE_TILES_WIDE = 4
 VILLAGE_TILE_SIZE = 20
 
 LIMIT_FPS = 25
@@ -60,6 +60,7 @@ FOV_ALGO = 0
 
 
 TORCH_RADIUS = 16
+ENEMY_SIGHT = 6
 
 # Game loop functions
 
@@ -90,9 +91,9 @@ def main_menu():
 
 		# We present the main menu
 
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 3, 'a) New Game')
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 - 1, 'b) Continue')
-		libtcod.console_print(0, SCREEN_WIDTH / 3, SCREEN_HEIGHT / 2 + 1, 'c) Exit')
+		libtcod.console_print(0, SCREEN_WIDTH / 5, SCREEN_HEIGHT / 2 - 3, 'a) New Game')
+		libtcod.console_print(0, SCREEN_WIDTH / 5, SCREEN_HEIGHT / 2 - 1, 'b) What makes MIND EATER different?')
+		libtcod.console_print(0, SCREEN_WIDTH / 5, SCREEN_HEIGHT / 2 + 1, 'c) Exit')
 
 
 		# this sends everything from the console to the screen.
@@ -113,15 +114,53 @@ def main_menu():
 			new_game()
 			play_game()
 		elif index == 1:
-			load_game()
-			play_game()
+			# when saving and loading are reliable again, add them back in here
+			# load_game()
+			# play_game()
+			instruction_menu()
 		elif index == 2:
 			exit(0)
 
 	exit(0)
 
+def instruction_menu():
+	libtcod.console_set_default_background(0, libtcod.darkest_blue)
+	libtcod.console_set_default_foreground(0, libtcod.yellow)
+	libtcod.console_set_background_flag(0, libtcod.BKGND_DEFAULT)
+	libtcod.console_set_alignment(0, libtcod.LEFT)
+
+	while not libtcod.console_is_window_closed():
+
+		libtcod.console_clear(0)
+
+		# We present the main menu
+
+		libtcod.console_print(0, 15, SCREEN_HEIGHT / 2 - 9, 'You start off really sucky')
+		libtcod.console_print(0, 15, SCREEN_HEIGHT / 2 - 5, 'But eventually you\'ll rule.')
+		libtcod.console_print(0, 15, SCREEN_HEIGHT / 2 - 1, 'Stand over a body,')
+		libtcod.console_print(0, 15, SCREEN_HEIGHT / 2 + 3, 'and hit e to eat its mind!')
+		libtcod.console_print(0, 15, SCREEN_HEIGHT / 2 + 7, 'Press ENTER to return.')
+
+
+		# this sends everything from the console to the screen.
+
+		libtcod.console_flush()
+
+		# some super basic input handling here. The key.c - ord('a') kinda just shanks a 0 - max int out of a lowercase letter
+
+		#key = libtcod.console_wait_for_keypress(True)
+		mouse = libtcod.Mouse()
+		key = libtcod.Key()
+
+		libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+
+		if key.vk == libtcod.KEY_ENTER or key.vk == libtcod.KEY_KPENTER:
+			main_menu()
+
+	exit(0)
+
 def new_game():
-	global player, game_state, game_log, target, lookback, objects
+	global player, game_state, game_log, target, lookback, objects, player_wait
 
 	if os.path.isfile('savegame'):
 		os.remove('savegame')
@@ -139,10 +178,11 @@ def new_game():
  
 	game_state = 'playing'
 	lookback = 0
+	player_wait = 0
 
-	#player.start_with(sword(0, 0))
-	#player.start_with(shield(0, 0))
-	#player.start_with(leather_armor(0, 0))
+	player.start_with(sword(0, 0))
+	player.start_with(shield(0, 0))
+	player.start_with(leather_armor(0, 0))
 	#player.start_with(axe(0, 0))
 
 	for obj in objects:
@@ -162,14 +202,14 @@ def save_game():
 	#file['stairs_index'] = objects.index(stairs)
 	file['game_state'] = game_state
 	file['game_log'] = game_log
-	file['curr_map_width'] = curr_map_width
-	file['curr_map_height'] = curr_map_height
+	file['cur_map_width'] = cur_map_width
+	file['cur_map_height'] = cur_map_height
 	file['target'] = target
 
 	file.close()
 
 def load_game():
-	global cur_map, objects, player, game_state, game_log, board, curr_map_width, curr_map_height, target, lookback
+	global cur_map, objects, player, game_state, game_log, board, cur_map_width, cur_map_height, target, lookback
 	# stairs
 	# set state
 
@@ -185,9 +225,9 @@ def load_game():
 	game_state = file['game_state']
 	game_log = file['game_log']
 
-	curr_map_width = file['curr_map_width']
-	curr_map_height = file['curr_map_height']
-	board = libtcod.console_new(curr_map_width, curr_map_height)
+	cur_map_width = file['cur_map_width']
+	cur_map_height = file['cur_map_height']
+	board = libtcod.console_new(cur_map_width, cur_map_height)
 
 	target = file['target']
 
@@ -200,7 +240,7 @@ def load_game():
 	lookback = 0
 
 def play_game():
-	global camera_x, camera_y, key, mouse
+	global camera_x, camera_y, key, mouse, fov_recompute, player_wait
 
 	player_action = None
 
@@ -222,14 +262,18 @@ def play_game():
 
 		player_action = handle_keys()
 		if player_action == 'exit':
-			if game_state is not 'dead':
-				save_game()
+			#if game_state is not 'dead':
+			#	save_game()
 			exit(0)
 
 		# monsters can go?
 
-		if game_state == 'playing' and player_action == 'took-turn':
-			
+		if player_wait > 0:
+			player_action = 'waiting'
+			player_wait -= 1
+
+		if game_state == 'playing' and player_action != 'no-turn':
+			fov_recompute = True
 			for obj in objects:
 				if obj.ai:
 					obj.ai.take_turn()
@@ -260,8 +304,8 @@ class Object:
 		self.mind = mind
 		if self.mind:
 			self.mind.owner = self
-			self.mind.name = 'The mind of a %s.'%self.name
-			self.mind.desc = 'This is a %s\'s mind. It has stuff.'%self.name
+			self.mind.name = 'A %s`s mind.'%self.name
+			self.mind.desc = 'A %s`s mind.'%self.name
 
 		self.inventory = []
 
@@ -276,8 +320,9 @@ class Object:
 	def move(self, dx, dy):
 		new_x = self.x + dx
 		new_y = self.y + dy
-
-		if in_range(new_x, new_y) and is_walkable(new_x, new_y):
+		if not in_range(new_x, new_y):
+			return False
+		if is_walkable(new_x, new_y):
 			self.x = new_x
 			self.y = new_y
 			return True
@@ -312,6 +357,40 @@ class Object:
 				self.move(dir_x, 0)
 			else:
 				self.move(0, dir_y)
+
+	def move_astar(self, target_x, target_y):
+		# Create an FOV map tht has the dimensions of the map
+		fov = libtcod.map_new(cur_map_width, cur_map_height)
+
+		# Scan the current map each turn and set all the walks as unwalkable
+		for y1 in range(cur_map_height):
+			for x1 in range(cur_map_width):
+				libtcod.map_set_properties(fov, x1, y1, cur_map[x1][y1].transparent, cur_map[x1][y1].walkable)
+
+		# Allocate an A* path
+		# 1.41 is the normal cost of moving diagonally; set to 0.0 to prohibit diagonal moes.
+
+		my_path = libtcod.path_new_using_map(fov, 1.41)
+
+		# Compute the path between self's coordinates and the target's coordinates
+		libtcod.path_compute(my_path, self.x, self.y, target_x, target_y)
+
+		# Check if the path exists, and also if it is less than 25 tiles
+		# Path size matter because the damn monsters might go on a marathon to clear a blocked hallway.
+
+		if not libtcod.path_is_empty(my_path) and libtcod.path_size(my_path) < 25:
+			# Find the next coordinates in the computed full path
+			x, y = libtcod.path_walk(my_path, True)
+			if x and y:
+				self.x = x
+				self.y = y
+
+		else:
+			# Keep the old move function as a backup so that if there are no paths
+			# The monster will still try to move towards the player (closer to the corridor opening)
+			self.move_towards(target_x, target_y)
+
+		libtcod.path_delete(my_path)
 
 	def distance_to(self, other):
 		#return the distance to another obj
@@ -443,9 +522,13 @@ class Fighter:
 			self.rested = True
 
 	def first_aid(self):
+		global player_wait
+
 		skill_level = self.owner.mind.skills[4]
 		if skill_level >= self.wounds and self.max_wounds > self.wounds:
 			self.wounds += 1
+		if self.owner is player:
+			player_wait = 6
 
 	def run_prep(self):
 		if self.runs < self.max_runs and self.parries_left > 0:
@@ -458,7 +541,7 @@ def player_fighter():
 
 def player_mind():
 	# could buffed for testing purposes. should start out all zeros
-	return Mind(make_faculty_list(weapon=1, armor=1))
+	return Mind(make_faculty_list(armor=1, weapon=1, mapping=1, parry=3, stealth=1))
 
 def farmer(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -466,6 +549,7 @@ def farmer(x, y):
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, first_aid=1, doors=1, dig=1))
 	monster =  Object(x, y, 'F', 'farmer', libtcod.yellow, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(peasant_tool(x, y))
+	monster.mind.desc = 'A farmer is concerned with scratching out a meager living, and his mind reflects that.'
 	return monster
 
 def lumber_worker(x, y):
@@ -474,6 +558,7 @@ def lumber_worker(x, y):
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, doors=1))
 	monster = Object(x, y, 'L', 'lumberjack', libtcod.sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(axe(x, y))
+	monster.mind.desc = 'A lumberjack sure knows how to swing an axe. Not much else.'
 	return monster
 
 def hunter(x, y):
@@ -482,13 +567,16 @@ def hunter(x, y):
 	mind_comp = Mind(make_faculty_list(mapping=1, parry=1, weapon=1, stealth=1, search=1, doors=1, run=1))
 	monster = Object(x, y, 'H', 'hunter', libtcod.red, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
 	monster.start_with(spear(x, y))
+	monster.mind.desc = 'A hunter\'s skills let him become one with the night.'
 	return monster
 
 def fisherman(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, doors=1, swim=1))
-	return Object(x, y, 'A', 'angler', libtcod.light_blue, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'A', 'angler', libtcod.light_blue, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.mind.desc = 'To fish in a pond this size requires a special sort of mind.'
+	return monster
 
 def guard(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
@@ -498,25 +586,43 @@ def guard(x, y):
 	monster.start_with(sword(x, y))
 	monster.start_with(shield(x, y))
 	monster.start_with(leather_armor(x, y))
+	monster.mind.desc = 'A guard\'s mind is a killing machine, but you would have had to be better already to get at this, right?'
+	return monster
+
+def village_guard(x, y, tlx, tly, state=0):
+	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
+	ai_comp = VillageGuardAI(tlx, tly, state)
+	mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, armor=1, doors=1, run=1))
+	monster = Object(x, y, 'G', 'guard', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.start_with(sword(x, y))
+	monster.start_with(shield(x, y))
+	monster.start_with(leather_armor(x, y))
+	monster.mind.desc = 'A guard\'s mind is a killing machine, but you would have had to be better already to get at this, right?'
 	return monster
 
 def cow(x, y):
 	fighter_comp = Fighter(wounds = 6, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(run=1, vault=1))
-	return Object(x, y, 'C', 'cow', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'C', 'cow', libtcod.white, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.mind.desc = 'You never know what you may find.'
+	return monster
 
 def chicken(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(search=2, dig=1))
-	return Object(x, y, 'c', 'chicken', libtcod.dark_orange, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster =  Object(x, y, 'c', 'chicken', libtcod.dark_orange, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.mind.desc = 'You may be surprised by how observant these birds are.'
+	return monster
 
 def dog(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 1, armor=0, xp = 0, death_function=monster_death)
 	ai_comp = BasicAI()
 	mind_comp = Mind(make_faculty_list(mapping=1, stealth=1, search=2, run=1, dig=1, swim=1, vault=1))
-	return Object(x, y, 'd', 'dog', libtcod.light_sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster = Object(x, y, 'd', 'dog', libtcod.light_sepia, walkable=False, fighter=fighter_comp, ai=ai_comp, mind=mind_comp)
+	monster.mind.desc = 'Man\'s best friend. But you\'re the furthest thing from a man.'
+	return monster
 
 def great_corpse(x, y):
 	corpse_type = ''
@@ -524,10 +630,17 @@ def great_corpse(x, y):
 	if chance(1,2):
 		corpse_type = 'great warrior'
 		mind_comp = Mind(make_faculty_list(mapping=1, parry=4, weapon=1, armor=1, first_aid=3))
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'A great warrior\'s mind.'
+		monster.mind.desc = 'With this, your skills could be legendary...'
+		return monster
 	else:
 		corpse_type = 'great thief'
 		mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, stealth=4, search=4, vault=1))
-	return Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'A great thief\'s mind.'
+		monster.mind.desc = 'With this, your skills could be legendary...'
+		return monster
 
 def fine_corpse(x, y):
 	corpse_type = ''
@@ -535,16 +648,34 @@ def fine_corpse(x, y):
 	if chance(1,4):
 		corpse_type = 'warrior'
 		mind_comp = Mind(make_faculty_list(mapping=1, parry=2, weapon=1, armor=1, first_aid=1))
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'A warrior\'s mind.'
+		monster.mind.desc = 'This was a lot easier than killing a guard.'
+		return monster
+
 	elif chance(1,3):
 		corpse_type = 'thief'
 		mind_comp = Mind(make_faculty_list(mapping=1, stealth=2, search=2, vault=1))
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'A thief\'s mind.'
+		monster.mind.desc = 'You could learn a thing or two...'
+		return monster
+
 	elif chance(1,2):
 		corpse_type = 'healer'
 		mind_comp = Mind(make_faculty_list(mapping=1, first_aid=2, run=1))
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'A healer\'s mind.'
+		monster.mind.desc = 'If he only knew what his education would enable.'
+		return monster
+
 	else:
 		corpse_type = 'athlete'
 		mind_comp = Mind(make_faculty_list(run=3, swim=1, vault=1))
-	return Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster = Object(x, y, '%', 'remains of a %s' % corpse_type, libtcod.gray, walkable=True, mind=mind_comp)
+		monster.mind.name = 'An athlete\'s mind.'
+		monster.mind.desc = 'If only you could use your body half as well!'
+		return monster
 
 def door(x, y):
 	fighter_comp = Fighter(wounds = 1, defense = 0, power = 0, armor=0, xp = 0, death_function=door_open_death)
@@ -635,6 +766,26 @@ def get_all_buffs(buffed):
 
 	return buff_list
 
+def enemy_can_see_player(monster):
+	if player.mind.skills[5] < monster.mind.skills[6] or player.mind.skills[5] == 0:
+		return libtcod.map_is_in_fov(enemy_fov_map, monster.x, monster.y)
+	elif cur_map[player.x][player.y].hiding_spot and player.distance_to(monster) > 1.5:
+		return False
+	else:
+		return libtcod.map_is_in_fov(enemy_fov_map, monster.x, monster.y) and libtcod.map_is_in_fov(stealth_fov_map, monster.x, monster.y)
+
+def player_can_see_enemy(monster):
+	# unused
+	if monster.mind is None:
+		return libtcod.map_is_in_fov(fov_map, monster.x, monster.y)
+	if player.mind.skills[6] < monster.mind.skills[5] or monster.mind.skills[5] == 0:
+		return libtcod.map_is_in_fov(fov_map, monster.x, monster.y)
+	elif cur_map[monster.x][monster.y].hiding_spot and player.distance_to(monster) > 1.5:
+		return False
+	else:
+		return (libtcod.map_is_in_fov(fov_map, monster.x, monster.y) and libtcod.map_is_in_fov(stealth_fov_map, monster.x, monster.y))
+
+
 class Buff:
 	def __init__(self, power_bonus=0, armor_bonus=0, max_wounds_bonus=0, max_parries_bonus=0, max_runs_bonus=0):
 		self.power_bonus = power_bonus
@@ -654,7 +805,7 @@ class BasicAI:
 	def take_turn(self):
 		monster = self.owner
 
-		if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+		if enemy_can_see_player(monster):
 			# move towards the player if far away
 			if monster.distance_to(player) >= 2:
 				monster.move_towards(player.x, player.y)
@@ -675,7 +826,7 @@ class AlertAI():
 	def take_turn(self):
 		monster = self.owner
 
-		if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+		if enemy_can_see_player(monster):
 			if monster.distance_to(player) >= 2:
 				monster.move_towards(player.x, player.y)
 
@@ -685,6 +836,81 @@ class AlertAI():
 			self.target_y = player.y
 		else:
 			monster.move_towards(self.target_x, self.target_y)
+
+class PsychoAI():
+	# this AI goes all, out, without regard to sightlines or what ever.
+	def take_turn(self):
+		monster = self.owner
+
+		dist = monster.distance_to(player)
+		if dist < 40:
+			monster.move_astar(player.x, player.y)
+
+		if player.fighter.wounds > 0 and dist < 2:
+			monster.fighter.attack(player)
+
+class VillageGuardAI():
+
+	def __init__(self, tlx, tly, state=0):
+		self.tlx = tlx
+		self.tly = tly
+		self.state = state
+		self.wait = 0
+
+	def take_turn(self):
+		monster = self.owner
+
+		if enemy_can_see_player(monster):
+			new_ai = AlertAI(player.x, player.y)
+			monster.ai = new_ai
+			new_ai.owner = monster
+
+			new_ai.take_turn()
+			return
+		if self.wait > 0:
+			self.wait -= 1
+			return
+
+		if self.state == 0:
+			monster.move_towards(self.tlx + 20, self.tly + 18)
+			if monster.x == self.tlx + 20 and monster.y == self.tly + 18:
+				self.state = 1
+				self.wait = 5
+		elif self.state == 1:
+			monster.move_towards(self.tlx + 39, self.tly + 19)
+			if monster.x == self.tlx + 39 and monster.y == self.tly + 19:
+				self.state = 2
+				self.wait = 5
+		elif self.state == 2:
+			monster.move_towards(self.tlx + 21, self.tly + 20)
+			if monster.x == self.tlx + 21 and monster.y == self.tly + 20:
+				self.state = 3
+				self.wait = 5
+		elif self.state == 3:
+			monster.move_towards(self.tlx + 20, self.tly + 39)
+			if monster.x == self.tlx + 20 and monster.y == self.tly + 39:
+				self.state = 4
+				self.wait = 5
+		elif self.state == 4:
+			monster.move_towards(self.tlx + 19, self.tly + 21)
+			if monster.x == self.tlx + 19 and monster.y == self.tly + 21:
+				self.state = 5
+				self.wait = 5
+		elif self.state == 5:
+			monster.move_towards(self.tlx, self.tly + 20)
+			if monster.x == self.tlx and monster.y == self.tly + 20:
+				self.state = 6
+				self.wait = 5
+		elif self.state == 6:
+			monster.move_towards(self.tlx + 18, self.tly + 19)
+			if monster.x == self.tlx + 18 and monster.y == self.tly + 19:
+				self.state = 7
+				self.wait = 5
+		elif self.state == 7:
+			monster.move_towards(self.tlx + 19, self.tly)
+			if monster.x == self.tlx +19 and monster.y == self.tly:
+				self.state = 0
+				self.wait = 5
 
 class Item():
 	# object can have an item component. this makes them an item. 
@@ -708,16 +934,11 @@ class Item():
 
 	def pick_up(self, picker):
 
-		if len(picker.inventory) > 25:
-			if picker is player:
-				log('Your inventory is full, can\'t pick this' + self.owner.name + 'up', libtcod.red)
-		else:
-			picker.inventory.append(self.owner)
-			objects.remove(self.owner)
-			if picker is player:
-				log('You picked up a ' + self.owner.name + '!', libtcod.green)
-			if self.equippable and picker.get_equipped_in_slot(self.slot) is None:
-				self.equip(picker)
+		picker.inventory.append(self.owner)
+		objects.remove(self.owner)
+		if picker is player:
+			log('You picked up a ' + self.owner.name + '!', libtcod.green)
+		self.equip(picker)
 
 	def drop(self, dropper):
 		if self.equipped:
@@ -755,7 +976,7 @@ class Item():
 	def equip(self, user):
 		old_shiz = user.get_equipped_in_slot(self.slot)
 		if old_shiz is not None:
-			old_shiz.unequip(user)
+			old_shiz.drop(user)
 
 		if user.mind.skills[2] == 0 and self.slot == 'weapon':
 			if user is player:
@@ -778,8 +999,6 @@ class Item():
 		if not self.equipped:
 			return None
 		self.equipped = False
-		if user is player:
-			log('Stopped equipping a ' + self.owner.name + ' as ' + self.slot + '.', libtcod.light_red)
 		if user.fighter is not None:
 			user.fighter.parries_left = min(user.fighter.parries_left, user.fighter.max_parries)
 
@@ -820,55 +1039,59 @@ class Tile:
 
 	def __init__(self, terrain='grass'):
 		self.type = terrain
-		(self.walkable, self.transparent, self.stealth, self.back, self.fore, self.char) = terrain_tile(terrain)
+		(self.walkable, self.transparent, self.stealth, self.hiding_spot, self.back, self.fore, self.char) = terrain_tile(terrain)
 		self.explored = False
 
 	def change_type(self, terrain):
 		self.type = terrain
-		(self.walkable, self.transparent, self.stealth, self.back, self.fore, self.char) = terrain_tile(terrain)
+		(self.walkable, self.transparent, self.stealth, self.hiding_spot, self.back, self.fore, self.char) = terrain_tile(terrain)
 
 def terrain_tile(terrain):
 	if terrain == 'grass':
-		return (True, True, False, libtcod.green, libtcod.green, '.')
+		return (True, True, False, False, libtcod.green, libtcod.green, '.')
 	if terrain == 'stone':
-		return (True, True, False, libtcod.gray, libtcod.gray, '.')
+		return (True, True, False, False, libtcod.gray, libtcod.gray, '.')
 	if terrain == 'stone wall':
-		return (False, False, True, libtcod.darker_gray, libtcod.darker_gray, '#')
+		return (False, False, True, False, libtcod.darker_gray, libtcod.darker_gray, '#')
 	if terrain == 'village wall':
-		return (False, False, True, libtcod.green, libtcod.sepia, '#')
+		return (False, False, True, False, libtcod.green, libtcod.sepia, '#')
 	if terrain == 'mud':
-		return (True, True, False, libtcod.sepia, libtcod.sepia, '.')
+		return (True, True, False, False, libtcod.sepia, libtcod.sepia, '.')
 	if terrain == 'tree':
-		return (False, False, True, libtcod.green, libtcod.dark_green, 'T')
+		return (False, False, True, False, libtcod.green, libtcod.dark_green, 'T')
 	if terrain == 'sand':
-		return (True, True, False, libtcod.light_amber, libtcod.light_amber, '.')
+		return (True, True, False, False, libtcod.light_amber, libtcod.light_amber, '.')
 	if terrain == 'shallow water':
-		return (True, True, True, libtcod.light_blue, libtcod.lighter_blue, '~')
+		return (True, True, False, True, libtcod.light_blue, libtcod.lighter_blue, '~')
 	if terrain == 'water':
-		return (False, True, True, libtcod.darker_blue, libtcod.dark_blue, '~')
+		return (False, True, False, True, libtcod.darker_blue, libtcod.dark_blue, '~')
 	if terrain == 'crops':
-		return (True, True, True, libtcod.sepia, libtcod.amber, 'C')
+		return (True, True, False, True, libtcod.sepia, libtcod.amber, 'C')
 	if terrain == 'fence':
-		return (False, True, False, libtcod.green, libtcod.dark_sepia, '#')
+		return (False, True, True, False, libtcod.green, libtcod.dark_sepia, '#')
 	if terrain == 'low stone wall':
-		return (False, True, True, libtcod.green, libtcod.light_gray, '#')
+		return (False, True, True, False, libtcod.green, libtcod.light_gray, '#')
 	if terrain == 'wood wall':
-		return (False, False, True, libtcod.dark_sepia, libtcod.dark_sepia, '#')
+		return (False, False, True, False, libtcod.dark_sepia, libtcod.dark_sepia, '#')
 	if terrain == 'weak hinges':
 		# the name here is a cludge to make things look nice. This is the tile for a door to sit on.
-		return (True, False, True, libtcod.dark_sepia, libtcod.dark_sepia, ' ')
+		return (True, False, True, False, libtcod.dark_sepia, libtcod.dark_sepia, ' ')
 	if terrain == 'wood floor':
-		return (True, True, False, libtcod.light_sepia, libtcod.light_sepia, '.')
+		return (True, True, False, False, libtcod.light_sepia, libtcod.light_sepia, '.')
 	if terrain == 'window':
-		return (False, True, True, libtcod.light_blue, libtcod.light_blue, '#')
+		return (False, True, True, False, libtcod.light_blue, libtcod.light_blue, '#')
 	if terrain == 'dirt road':
-		return (True, True, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
+		return (True, True, False, False, libtcod.dark_sepia, libtcod.dark_sepia, '.')
+	if terrain == 'cobble road':
+		return (True, True, False, False, libtcod.gray, libtcod.gray, '.')
 	if terrain == 'gravestone':
-		return (False, True, True, libtcod.green, libtcod.gray, 149)
+		return (False, True, True, False, libtcod.green, libtcod.gray, 149)
 	if terrain == 'fresh grave':
-		return (True, True, False, libtcod.dark_green, libtcod.sepia, 'o')
+		return (True, True, False, False, libtcod.dark_green, libtcod.sepia, 'o')
 	if terrain == 'old grave':
-		return (True, True, False, libtcod.dark_green, libtcod.dark_green, 'o')
+		return (True, True, False, False, libtcod.dark_green, libtcod.dark_green, 'o')
+	if terrain == 'open grave':
+		return (True, True, False, True, libtcod.dark_green, libtcod.dark_violet, 'o')
 
 def initialize_ascii_maps():
 	# we set the integers from 128 on up to be special graphics in our font file
@@ -928,15 +1151,15 @@ def initialize_ascii_maps():
 	libtcod.console_map_ascii_code_to_font(151, 11, 13)
 
 def make_village_map():
-	global cur_map, objects, curr_map_height, curr_map_width, board
+	global cur_map, objects, cur_map_height, cur_map_width, board
 
 	# stairs
 	# a village map - a set of tiles, all enclosed by a wall.
 
-	curr_map_height = VILLAGE_TILES_HIGH * VILLAGE_TILE_SIZE + 2
-	curr_map_width = VILLAGE_TILES_WIDE * VILLAGE_TILE_SIZE + 2
+	cur_map_height = VILLAGE_TILES_HIGH * VILLAGE_TILE_SIZE
+	cur_map_width = VILLAGE_TILES_WIDE * VILLAGE_TILE_SIZE
 
-	board = libtcod.console_new(curr_map_width, curr_map_height)
+	board = libtcod.console_new(cur_map_width, cur_map_height)
 
 	libtcod.console_set_default_background(board, libtcod.darkest_blue)
 	libtcod.console_set_default_foreground(board, libtcod.yellow)
@@ -946,10 +1169,10 @@ def make_village_map():
 	# split the area into an X x Y grid of NxN village tile areas
 
 	cur_map = [[Tile('grass')
-		for y in range(curr_map_height) ]
-			for x in range(curr_map_width) ]
+		for y in range(cur_map_height) ]
+			for x in range(cur_map_width) ]
 
-	build_double_wall(0, 0, curr_map_width, curr_map_height, 'village wall')
+	#build_double_wall(0, 0, cur_map_width, cur_map_height, 'village wall')
 
 	# staggered_path(1, 1, 100, 100, 'dirt road')
 
@@ -959,7 +1182,7 @@ def make_village_map():
 
 	for y in range(VILLAGE_TILES_HIGH):
 		for x in range(VILLAGE_TILES_WIDE):
-			top_left_corners.append((1+x*VILLAGE_TILE_SIZE, 1+y*VILLAGE_TILE_SIZE))
+			top_left_corners.append((x*VILLAGE_TILE_SIZE, y*VILLAGE_TILE_SIZE))
 
 	# let's get trees down first. no trees in the middle of the road!
 
@@ -1009,6 +1232,18 @@ def make_village_map():
 
 				staggered_path(from_road_x, from_road_y, to_road_x, to_road_y, 'dirt road')
 
+	walled_x = roll(1, VILLAGE_TILES_WIDE - 3)
+	walled_y = roll(1, VILLAGE_TILES_HIGH - 3)
+
+	top_left_corners = []
+
+	walled_tiles = [(walled_x, walled_y), (walled_x+1, walled_y+1), (walled_x+1, walled_y), (walled_x, walled_y+1)]
+
+	for y in range(VILLAGE_TILES_HIGH):
+		for x in range(VILLAGE_TILES_WIDE):
+			if walled_tiles.count((x, y)) == 0:
+				top_left_corners.append((x*VILLAGE_TILE_SIZE, y*VILLAGE_TILE_SIZE))
+
 	random.shuffle(top_left_corners)
 
 	# populate each tile with random content
@@ -1029,7 +1264,7 @@ def make_village_map():
 	# refactor: tile_types = village_tiles(VILLAGE_TILES_HIGH*VILLAGE_TILES_WIDE)
 	tile_types = []
 
-	tot_tiles = VILLAGE_TILES_WIDE * VILLAGE_TILES_HIGH
+	tot_tiles = VILLAGE_TILES_WIDE * VILLAGE_TILES_HIGH - 5
 
 	for x in range(tot_tiles / 6):
 		tile_types.append(0)
@@ -1068,10 +1303,7 @@ def make_village_map():
 		elif choice == 5:
 			place_pens(tile[0], tile[1], VILLAGE_TILE_SIZE)
 
-
-	#stairs = Object(roll(20,30), roll(20,30), ' ', 'stairs', libtcod.white)
-	#objects.append(stairs)
-	#stairs.send_to_back()
+	place_walled_village(walled_x*VILLAGE_TILE_SIZE, walled_y*VILLAGE_TILE_SIZE)
 
 def place_stone_patch(xpos, ypos):
 	global cur_map
@@ -1341,16 +1573,33 @@ def place_pens(xpos, ypos, tile_size):
 		objects.append(new_gate)
 		new_gate.send_to_back()
 
+def place_walled_village(xpos, ypos):
+	global cur_map, objects
+
+	rectangle_tile_fill(xpos, ypos, 40, 40, 'grass')
+	build_double_wall(xpos-1, ypos-1, 42, 42, 'village wall')
+
+	rectangle_tile_fill(xpos+19, ypos-1, 2, 42, 'cobble road')
+	rectangle_tile_fill(xpos-1, ypos+19, 42, 2, 'cobble road')
+	rectangle_tile_fill(xpos+18, ypos+18, 4, 4, 'cobble road')
+	rectangle_tile_fill(xpos+19, ypos+19, 2, 2, 'shallow water')
+
+	objects.append(village_guard(xpos+19, ypos, xpos, ypos, 0))
+	objects.append(village_guard(xpos+21, ypos+20, xpos, ypos, 3))
+	objects.append(village_guard(xpos, ypos+20, xpos, ypos, 6))
+
+	# north
+
 def radial_tile_paint(radius, xpos, ypos, terrain):
 	# This only respects the boundaries of the current map, not your current terrain.
 
 	global cur_map
 
 	xmin = max(0, xpos - radius)
-	xmax = min(xpos + radius, curr_map_width)
+	xmax = min(xpos + radius, cur_map_width)
 
 	ymin = max(0, ypos - radius)
-	ymax = min(ypos + radius, curr_map_height)
+	ymax = min(ypos + radius, cur_map_height)
 
 	for x in range(xmin, xmax):
 		for y in range(ymin, ymax):
@@ -1452,55 +1701,65 @@ def build_double_wall(xpos, ypos, w, h, terrain):
 def staggered_path(start_x, start_y, end_x, end_y, terrain):
 	global cur_map
 
-	curr_x = start_x
-	curr_y = start_y
+	cur_x = start_x
+	cur_y = start_y
 
-	cur_map[curr_x][curr_y].change_type(terrain)
+	cur_map[cur_x][cur_y].change_type(terrain)
 
 	xmag = abs(end_x - start_x)
 	ymag = abs(end_y - start_y)
 
 	if ymag == 0:
-		for x in range(curr_x, end_x):
+		for x in range(cur_x, end_x):
 			cur_map[x][end_y].change_type(terrain)
 		return None
 
 	if xmag == 0:
-		for y in range(curr_y, end_y):
+		for y in range(cur_y, end_y):
 			cur_map[end_x][y].change_type(terrain)
 		return None
 
 	xsign = (end_x - start_x)/abs(end_x - start_x)
 	ysign = (end_y - start_y)/abs(end_y - start_y)
 
-	while curr_x is not end_x and curr_y is not end_y:
+	while cur_x is not end_x and cur_y is not end_y:
 		if chance(xmag, xmag+ymag):
 			xmag = xmag - 1
-			curr_x = curr_x + xsign
-			cur_map[curr_x][curr_y].change_type(terrain)
+			cur_x = cur_x + xsign
+			cur_map[cur_x][cur_y].change_type(terrain)
 		else:
 			ymag = ymag - 1
-			curr_y = curr_y  + ysign
-			cur_map[curr_x][curr_y].change_type(terrain)
+			cur_y = cur_y  + ysign
+			cur_map[cur_x][cur_y].change_type(terrain)
 
-	if curr_x is not end_x:
-		for x in range(curr_x, end_x):
+	if cur_x is not end_x:
+		for x in range(cur_x, end_x):
 			cur_map[x][end_y].change_type(terrain)
-	elif curr_y is not end_y:
-		for y in range(curr_y, end_y):
+	elif cur_y is not end_y:
+		for y in range(cur_y, end_y):
 			cur_map[end_x][y].change_type(terrain)
 
 def initialize_fov():
-	global fov_recompute, fov_map
+	global fov_recompute, fov_map, enemy_fov_map, stealth_fov_map
 	fov_recompute = True
 
 
 
-	fov_map = libtcod.map_new(curr_map_width, curr_map_height)
+	fov_map = libtcod.map_new(cur_map_width, cur_map_height)
+	enemy_fov_map = libtcod.map_new(cur_map_width, cur_map_height)
+	stealth_fov_map = libtcod.map_new(cur_map_width, cur_map_height)
 
-	for y in range(curr_map_height):
-		for x in range(curr_map_width):
+	for y in range(cur_map_height):
+		for x in range(cur_map_width):
 			libtcod.map_set_properties(fov_map, x, y, cur_map[x][y].transparent, cur_map[x][y].walkable)
+
+	for y in range(cur_map_height):
+		for x in range(cur_map_width):
+			libtcod.map_set_properties(enemy_fov_map, x, y, cur_map[x][y].transparent, cur_map[x][y].walkable)
+
+	for y in range(cur_map_height):
+		for x in range(cur_map_width):
+			libtcod.map_set_properties(stealth_fov_map, x, y, not cur_map[x][y].stealth, cur_map[x][y].walkable)
 
 	libtcod.console_clear(0)
 
@@ -1512,8 +1771,8 @@ def move_camera(target_x, target_y):
 
 	if x < 0: x = 0
 	if y < 0: y = 0
-	if x > curr_map_width - CAMERA_WIDTH: x = curr_map_width - CAMERA_WIDTH
-	if y > curr_map_height - CAMERA_HEIGHT: y = curr_map_height - CAMERA_HEIGHT
+	if x > cur_map_width - CAMERA_WIDTH: x = cur_map_width - CAMERA_WIDTH
+	if y > cur_map_height - CAMERA_HEIGHT: y = cur_map_height - CAMERA_HEIGHT
 
 	if x != camera_x or y != camera_y:
 		fov_recompute = True
@@ -1611,6 +1870,8 @@ def runs_info(obj):
 
 def render_all_night():
 	global fov_map
+	global enemy_fov_map
+	global stealth_fov_map
 	global fov_recompute
 	global camera_x, camera_y
 
@@ -1619,7 +1880,9 @@ def render_all_night():
 	if fov_recompute:
 
 		fov_recompute = False
-		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, True, FOV_ALGO)
+		libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS+player.mind.skills[6]*3, True, FOV_ALGO)
+		libtcod.map_compute_fov(enemy_fov_map, player.x, player.y, ENEMY_SIGHT, True, FOV_ALGO)
+		libtcod.map_compute_fov(stealth_fov_map, player.x, player.y, TORCH_RADIUS*player.mind.skills[6]*3, True, FOV_ALGO)
 		libtcod.console_clear(board)
 
 		for y in range(CAMERA_HEIGHT):
@@ -1851,7 +2114,8 @@ def escape_menu():
 	options.append(['Skills', '', 0],)
 	options.append(['Controls', '', 1])
 	if game_state == 'playing':
-		options.append(['Save and Quit', '', 2])
+		#when saving and loading is reliable, add them back in here.
+		options.append(['Quit', '', 2])
 	elif game_state == 'dead':
 		options.append(['Quit', '', 3])
 	options.append(['Main Menu', '', 4])
@@ -1882,14 +2146,53 @@ def skills_menu():
 def controls_screen():
 	options = []
 
-	options.append('Move - Arrow Keys')
-	options.append('Other Move - Num Pad')
-	options.append('Rest (Recover Parries) - Space')
-	options.append('Eat Minds - E')
-	options.append('First Aid - F')
-	options.append('Menu - Escape')
-	single_screen('CONTROLS', options)
+	options.append('Arrow Keys - Move')
+	options.append('Num Pad - Move')
+	options.append('Space - Rest (recover parries)')
+	options.append('e - Eat minds')
+	options.append('f - Perform first aid *')
+	options.append('r - Run (parries -> free moves) *')
+	options.append('d - Dig for \'loot\' *')
+	options.append('Escape - Menu')
+	options.append('[ - Older messages')
+	options.append('] - More recent messages')
+	single_screen('CONTROLS (* = skill required)', options)
 	return None
+
+def end_game_menu():
+	options = []
+	options.append(['Yes, end the game.', 'You will receive a score based on your accomplishments.', 0])
+	options.append(['No, I\'m still working on it!', 'Eat better minds or find more equipment to increase your score.', 1])
+
+	choice = triple_menu('End of map! Leave this region?', options)
+
+	if choice == 1:
+		return
+	else:
+		mind_score = sum(player.mind.skills)
+		equipment_score = len(player.inventory)
+		wounds_score = player.fighter.wounds
+		total_score = mind_score + equipment_score + wounds_score
+
+		options = []
+
+		options.append('Mind Score: %i' %mind_score)
+		options.append('Item Score: %i' %equipment_score)
+		options.append('Wounds Remaining: %i' %wounds_score)
+		options.append('***TOTAL SCORE***')
+		options.append('%i'%total_score)
+		if total_score < 5:
+			options.append('Survival is sweeter than death, but not by much.')
+		elif total_score < 12:
+			options.append('Noble efforts can be their own reward.')
+		elif total_score < 20:
+			options.append('Success and victory are yours!')
+		else:
+			options.append('A true MIND EATER!')
+
+		single_screen('Congratulations! You survived!', options)
+
+		main_menu()
 
 def handle_keys():
 	global key, lookback
@@ -1939,7 +2242,7 @@ def handle_keys():
 			return player_dig(player.x, player.y)
 		elif key_char == 'D':
 			while len(player.inventory) > 0:
-				player.inventory[0].item.drop(player)
+				player.inventory[0].item.drop(playinger)
 		elif key_char == 'w':
 			for thing in player.inventory:
 				thing.item.toggle_equip(player)
@@ -1951,10 +2254,13 @@ def handle_keys():
 	return 'no-turn'
 
 def player_move_or_attack(dx, dy):
-	global fov_recompute, target
+	global target
 
 	x = player.x + dx
 	y = player.y + dy
+
+	if not in_range(x, y):
+		end_game_menu()
 
 	# try to find a target to attack
 	targeted = None
@@ -1975,7 +2281,6 @@ def player_move_or_attack(dx, dy):
 		target = targeted
 		return 'took-turn'
 	elif player.move(dx, dy):
-		fov_recompute = True
 		if player.fighter.runs > 0:
 			player.fighter.runs -= 1
 			return 'ran'
@@ -1984,6 +2289,8 @@ def player_move_or_attack(dx, dy):
 		return 'no-turn'
 
 def player_dig(x, y):
+	global fov_recompute
+
 	if cur_map[x][y].type != 'fresh grave':
 		log("You dig half-heartedly, but you know there's nothing here...", libtcod.red)
 		return 'took-turn'
@@ -1997,6 +2304,8 @@ def player_dig(x, y):
 		objects.append(corpse)
 		corpse.send_to_back()
 		log("You dig hungrily, and unearth a treasure!", libtcod.green)
+	cur_map[player.x][player.y].change_type('open grave')
+	fov_recompute = True
 
 def player_pause():
 	player.fighter.rest()
@@ -2052,11 +2361,11 @@ def num_to_faculty_name(ind, magnitude=1):
 	if ind == 5:
 		return 'Stealth %i' % magnitude
 	if ind == 6:
-		return 'Searching %i' % magnitude
+		return 'Vision %i' % magnitude
 	if ind == 7:
 		return 'Open Doors'
 	if ind == 8:
-		return 'Running'
+		return 'Running %i' % magnitude
 	if ind == 9:
 		return 'Digging'
 	if ind == 10:
@@ -2074,7 +2383,7 @@ def num_to_faculty_description(ind, magnitude=1):
 	if ind == 3:
 		return 'You can now wear armor, just like the filth you hunt. It reduces the damage from each landed blow.'
 	if ind == 4:
-		return 'This much knowledge of first aid lets you regain a wound if you have %i or fewer left. Not for combat use!'
+		return 'This much knowledge of first aid lets you regain a wound if you have %i or fewer left. Not for combat use!' %magnitude
 	if ind == 5:
 		return 'You can duck down to hide behind or in low obstructions.'
 	if ind == 6:
@@ -2130,7 +2439,7 @@ def is_walkable(x, y):
 	return True
 
 def in_range(x, y):
-	if 0 <= x < curr_map_width and 0 <= y < curr_map_height:
+	if 0 <= x < cur_map_width and 0 <= y < cur_map_height:
 		return True
 	else:
 		return False
