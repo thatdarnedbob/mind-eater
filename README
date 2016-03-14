@@ -10,6 +10,6 @@ On my pc, it works in a folder with just MindEater.py, libtcodpy.py, libtcod-min
 
 On a mac, it works in a folder with just MindEater.py, libtcodpy.py, cprotos.py (from libtcod), and the terminal12x12.png font.
 
-In either case, just use 'python MindEater.py' from a command line to start the game.
+In either case, just use 'python MindEater.py' from a command line to start the game. The necessary files are in the platform specific branches of this project; I don't know whether using these or getting them striaght to the source is better.
 
 Some of this may be wrong because I am very bad at computers right now.
