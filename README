@@ -1,15 +1,13 @@
 7dRL - The Mind Eater
 
-This is a game I'm working on for the Seven-Day Rogue-Like challenge. Two big firsts for me: first game, first time using git for something, first python project of any length. If you see this project and think "why didn't he do THIS?" let me know because so much of this is new to me. Thanks for reading!
+This game was made for the Seven-Day Rogue-Like challenge. Two big firsts for me: first game, first time using git for something, first python project of any length. If you see this project and think "why didn't he do THIS?" let me know because so much of this is new to me. Thanks for reading!
 
 How to run this:
 
-You need Python 2.7 and libtcodpy to run this game.
+You need Python 2.7 to run this game. After that, switch to the appropriate branch for your platform here, either mindeater-mac or mindeater-windows. There are a couple of buttons to do this above the file listing.
 
-On my pc, it works in a folder with just MindEater.py, libtcodpy.py, libtcod-mingw.dll, SDL.dll, and the terminal12x12.png font from libtcod.
+From that branch, you can download all the files, specific to your platform, into a zip. Extract that, and get into a command prompt/terminal window in that directory.
 
-On a mac, it works in a folder with just MindEater.py, libtcodpy.py, cprotos.py (from libtcod), and the terminal12x12.png font.
+Then you can just use 'python MindEater.py' from a command line to start the game.
 
-In either case, just use 'python MindEater.py' from a command line to start the game. The necessary files are in the platform specific branches of this project; I don't know whether using these or getting them striaght to the source is better.
-
-Some of this may be wrong because I am very bad at computers right now.
+If you run into any problems making this work with these instructions, please let me know!
